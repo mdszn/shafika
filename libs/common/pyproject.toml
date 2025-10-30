@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "common"
+version = "0.1.0"
+description = "Shared utilities for Web3 DaaS services"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "redis>=5,<6",
+  "python-dotenv>=1,<2",
+  "sqlalchemy>=2.0,<3",
+  "psycopg2-binary>=2.9,<3",
+]
+
+[tool.setuptools]
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["common*"]
+
