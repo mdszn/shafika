@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "log-poller"
+version = "0.1.0"
+description = "Log poller service"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "web3>=6,<7",
+  "websockets>=12,<13",
+  "python-dotenv>=1,<2",
+]
+
+[project.scripts]
+logpoller = "logpoller.__main__:main"
+
+
+[tool.setuptools]
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["logpoller*"]
+
+
