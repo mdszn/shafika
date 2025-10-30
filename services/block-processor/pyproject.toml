@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "block-processor"
+version = "0.1.0"
+description = "Block processor service"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "web3>=6,<7",
+  "psycopg2-binary>=2.9,<3",
+  "python-dotenv>=1,<2",
+]
+
+[project.scripts]
+block-processor = "blockprocessor.__main__:main"
+
+[tool.setuptools]
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["blockprocessor*"]
+
