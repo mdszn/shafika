@@ -65,3 +65,24 @@ CREATE INDEX IF NOT EXISTS idx_transfers_token_id ON transfers(token_address, to
 CREATE INDEX IF NOT EXISTS idx_transfers_amount_usd ON transfers(amount_usd DESC NULLS LAST) WHERE amount_usd IS NOT NULL;  -- for top transfers
 
 CREATE INDEX IF NOT EXISTS idx_transfers_raw_log ON transfers USING GIN(raw_log);
+
+CREATE TABLE IF NOT EXISTS tokens (
+  token_address VARCHAR(42) PRIMARY KEY,
+  token_type    TEXT,
+  symbol        TEXT,
+  name          TEXT,
+  decimals      SMALLINT,
+  fetched_at    TIMESTAMPTZ DEFAULT now(),
+  failed        BOOLEAN DEFAULT FALSE,
+  extra         JSONB
+);
+
+-- Index for finding failed tokens (to retry later)
+CREATE INDEX IF NOT EXISTS idx_tokens_failed ON tokens(failed, fetched_at DESC) WHERE failed = TRUE;
+
+-- Index for token type queries
+CREATE INDEX IF NOT EXISTS idx_tokens_type ON tokens(token_type) WHERE token_type IS NOT NULL;
+
+-- Index for recently added tokens
+CREATE INDEX IF NOT EXISTS idx_tokens_fetched ON tokens(fetched_at DESC);
+

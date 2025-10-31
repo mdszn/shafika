@@ -62,3 +62,14 @@ class Transfer(Base):
   receipt_status = Column(SmallInteger, nullable=True)
   raw_log = Column(JSON, nullable=True)
   inserted_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+
+class Token(Base):
+  __tablename__ = "tokens"
+  token_address = Column(String(42), primary_key=True)
+  token_type = Column(Text, nullable=True)
+  symbol = Column(Text, nullable=True)
+  name = Column(Text, nullable=True)
+  decimals = Column(SmallInteger, nullable=True)
+  fetched_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+  failed = Column(Boolean, default=False)
+  extra = Column(JSON, nullable=True)
