@@ -27,20 +27,23 @@ class BlockProcessor:
   def run(self):
     print(f"Worker listening on queue '{self.queue_name}'...")
     while True:
-      job = self.queue.blocking_pop_json(self.queue_name)
-      if job:
-        job_type = job.get('job_type')
-        if job_type == 'process_block':
-          block_number = job.get("block_number")
-          block_hash = job.get("block_hash")
-          print(f"Processing Block {block_number}")
-          self.process_block(block_number, block_hash)
-        else:
-          print(f"Unknown job type: {job_type}")
-
-  def get_receipt(self):
-    receipt = self.web3.eth.get_transaction_receipt('0xdcc937ca1c6ba6d41a76dc5d18d094f820e52a3dc87a015ead57b48051a40b87')
-    print(receipt)
+      job_id, job = self.queue.blocking_pop_json(self.queue_name)
+      
+      if not job:
+        if job_id:
+          print(f"Job {job_id} data missing or expired")
+        continue
+      
+      block_number = job.get("block_number")
+      block_hash = job.get("block_hash")
+      print(f"Processing Block {block_number}")
+      
+      try:
+        self.process_block(block_number, block_hash)
+        self.queue.delete_job(job_id)
+      except Exception as e:
+        print(f"Error processing block {block_number}: {e}")
+        # TODO: ADD TO POSTGRES DLQ TABLE FOR RUNNING LATER ON
   
   def process_block(self, block_number: int, block_hash: str):
     """Fetch block, parse txs, write to DB."""

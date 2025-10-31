@@ -38,16 +38,20 @@ class LogProcessor:
     """Main loop: pull jobs from Redis and process them"""
     print(f"Worker listening on queue '{self.queue_name}'...")
     while True:
-      job = self.queue.blocking_pop_json(self.queue_name)
-      if job:
-        job_type = job.get('job_type')
-        if job_type == 'process_log':
-          try:
-            self.process_log(job)
-          except Exception as e:
-            print(f"Error processing log: {e}")
-        else:
-          print(f"Unknown job type: {job_type}")
+      job_id, job = self.queue.blocking_pop_json(self.queue_name)
+      
+      if not job:
+        if job_id:
+          print(f"Job {job_id} data missing or expired")
+        continue
+      
+      # Process log job
+      try:
+        self.process_log(job)
+        self.queue.delete_job(job_id)  # Clean up on success
+      except Exception as e:
+        print(f"Error processing log: {e}")
+        # TODO: PUSH TO POSTGRES FOR DLQ REDRIVING
   
   def process_log(self, job: dict):
     """Process a single log event - dispatches to appropriate handler"""
@@ -58,7 +62,6 @@ class LogProcessor:
     
     event_signature = topics[0]
     
-    # Route to appropriate handler
     if event_signature == TRANSFER_EVENT_SIGNATURE:
       self._process_erc20_or_erc721_transfer(job, topics)
     elif event_signature == ERC1155_TRANSFER_SINGLE:

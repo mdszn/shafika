@@ -34,12 +34,12 @@ class BlockPoller:
                 block_number = int(block_number_hex, 16)
                 block_hash = header.get("hash")
                 print(f"Pushing block {block_number} into queue")
-                job = {
-                  "job_type": "process_block",
+                job_id = f"block:{block_number}"
+                job_data = {
                   "block_number": block_number,
                   "block_hash": block_hash
                 }
-                self.queue.push_json(self.queue_name, job)
+                self.queue.push_json(self.queue_name, job_id, job_data)
               yield header 
       except Exception:
         await asyncio.sleep(2)

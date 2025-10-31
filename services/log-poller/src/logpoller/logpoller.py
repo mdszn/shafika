@@ -59,9 +59,9 @@ class LogPoller:
                 transaction_hash = log_event.get("transactionHash")
                 transaction_index = log_event.get("transactionIndex")
                 
+                job_id = f"log:{transaction_hash}:{log_index}"
                 
                 job = {
-                  "job_type": "process_log",
                   "address": address,
                   "block_number": block_number,
                   "block_hash": block_hash,
@@ -72,7 +72,7 @@ class LogPoller:
                   "transaction_hash": transaction_hash,
                   "transaction_index": transaction_index
                 }
-                self.queue.push_json(self.queue_name, job)
+                self.queue.push_json(self.queue_name, job_id, job)
               
               yield log_event
       except Exception as e:

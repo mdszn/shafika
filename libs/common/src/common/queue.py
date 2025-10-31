@@ -11,9 +11,10 @@ class RedisQueueManager:
   def push(self, queue_name: str, item: str):
     self.client.rpush(queue_name, item)
     
-  def push_json(self, queue_name: str, data: dict):
-    """Push a JSON object to the queue."""
-    self.client.rpush(queue_name, json.dumps(data))
+  def push_json(self, queue_name: str, job_id: str, data: dict):
+    """Push job ID to queue and store data."""
+    self.client.set(job_id, json.dumps(data))
+    self.client.rpush(queue_name, job_id)
 
   def blocking_pop(self, queue_name: str, timeout: int = 0):
     result = self.client.blpop(queue_name, timeout=timeout)
@@ -28,10 +29,16 @@ class RedisQueueManager:
     return json.loads(item) if item else None
 
   def blocking_pop_json(self, queue_name: str, timeout: int = 0):
-    """Block until JSON object is available."""
+    """Pop job ID from queue and fetch its data."""
     result = self.client.blpop(queue_name, timeout=timeout)
-    if result:
-      _, item = result
-      return json.loads(item)
-    return None
+    if not result:
+      return None, None
+   
+    _, job_id = result
+    job_data = self.client.get(job_id)
+    return job_id, json.loads(job_data)
+
+  def delete_job(self, job_id: str):
+    """Delete job data after processing."""
+    self.client.delete(job_id)
 
