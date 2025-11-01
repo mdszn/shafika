@@ -86,3 +86,20 @@ CREATE INDEX IF NOT EXISTS idx_tokens_type ON tokens(token_type) WHERE token_typ
 -- Index for recently added tokens
 CREATE INDEX IF NOT EXISTS idx_tokens_fetched ON tokens(fetched_at DESC);
 
+CREATE TABLE failed_jobs (
+  id SERIAL PRIMARY KEY,
+  job_id VARCHAR(100) UNIQUE NOT NULL,
+  queue_name VARCHAR(50) NOT NULL,
+  job_type VARCHAR(50) NOT NULL,
+  data JSONB NOT NULL,
+  error TEXT,
+  failed_at TIMESTAMPTZ DEFAULT NOW(),
+  retries INT DEFAULT 0,
+  last_retry_at TIMESTAMPTZ,
+  status VARCHAR(20) DEFAULT 'failed',  -- 'failed', 'retrying', 'dead'
+  worker_id TEXT
+);
+
+CREATE INDEX idx_failed_jobs_status ON failed_jobs(status, failed_at DESC);
+CREATE INDEX idx_failed_jobs_queue ON failed_jobs(queue_name, status);
+CREATE INDEX idx_failed_jobs_type ON failed_jobs(job_type);
