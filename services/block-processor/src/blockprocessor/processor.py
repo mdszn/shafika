@@ -89,6 +89,7 @@ class BlockProcessor:
     except Exception as e:
       session.rollback()
       self._mark_error(session, block_record, block_number, e)
+      raise
     finally:
       session.close()
 

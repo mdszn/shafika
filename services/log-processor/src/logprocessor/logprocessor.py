@@ -10,6 +10,7 @@ from common.db import SessionLocal
 from common.token import TokenMetadata
 from db.models.models import Transfer
 from eth_abi import decode
+from common.failedjob import FailedJobManager
 
 
 # Event signatures
@@ -24,6 +25,7 @@ class LogProcessor:
   queue_name: str
   executor: ThreadPoolExecutor
   token_service: TokenMetadata
+  failed_job: FailedJobManager
   
   def __init__(self, queue_name: str = "logs", max_workers: int = 10000):
     load_dotenv()
@@ -33,6 +35,7 @@ class LogProcessor:
     self.queue_name = queue_name
     self.executor = ThreadPoolExecutor(max_workers=max_workers)
     self.token_service = TokenMetadata(self.web3)
+    self.failed_job = FailedJobManager(queue_name, 'process_log')
     
   def run(self):
     """Main loop: pull jobs from Redis and process them"""
@@ -45,13 +48,16 @@ class LogProcessor:
           print(f"Job {job_id} data missing or expired")
         continue
       
-      # Process log job
       try:
         self.process_log(job)
-        self.queue.delete_job(job_id)  # Clean up on success
+        self.queue.delete_job(job_id) 
       except Exception as e:
-        print(f"Error processing log: {e}")
-        # TODO: PUSH TO POSTGRES FOR DLQ REDRIVING
+        print(f"Erro processing log for Job")  
+        if self.failed_job.record(job_id, job, str(e)):
+         self.queue.delete_job(job_id)
+        else:
+          print(f"CRITICAL: Could not record failure for {job_id} - left in Redis")
+          
   
   def process_log(self, job: dict):
     """Process a single log event - dispatches to appropriate handler"""
@@ -238,6 +244,7 @@ class LogProcessor:
       
     except Exception as e:
       print(f"  Error decoding ERC1155 batch: {e}")
+      raise  # Re-raise so run() can record failure
   
   def _save_transfer(self, **kwargs):
     """Save a transfer to the database"""
@@ -265,6 +272,7 @@ class LogProcessor:
     except Exception as e:
       session.rollback()
       print(f"  ✗ Error saving transfer: {e}")
+      raise
     finally:
       session.close()
   
