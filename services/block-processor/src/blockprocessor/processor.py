@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from common.queue import RedisQueueManager
 from common.db import SessionLocal
 from db.models.models import Block, Transaction, WorkerStatus
+from common.failedjob import FailedJobManager
 
 
 class BlockProcessor:
@@ -15,6 +16,7 @@ class BlockProcessor:
   queue: RedisQueueManager
   queue_name: str
   executor: ThreadPoolExecutor
+  failed_job: FailedJobManager
 
   def __init__(self, queue_name: str = "blocks", max_workers: int = 10):
     load_dotenv()
@@ -23,6 +25,7 @@ class BlockProcessor:
     self.queue = RedisQueueManager()
     self.queue_name = queue_name
     self.executor = ThreadPoolExecutor(max_workers=max_workers)
+    self.failed_job = FailedJobManager(queue_name, 'process_block')
 
   def run(self):
     print(f"Worker listening on queue '{self.queue_name}'...")
@@ -43,7 +46,10 @@ class BlockProcessor:
         self.queue.delete_job(job_id)
       except Exception as e:
         print(f"Error processing block {block_number}: {e}")
-        # TODO: ADD TO POSTGRES DLQ TABLE FOR RUNNING LATER ON
+        if self.failed_job.record(job_id, job, str(e)):
+          self.queue.delete_job(job_id)
+        else:
+          print(f"CRITICAL: Could not record failure for {job_id} - left in Redis")
   
   def process_block(self, block_number: int, block_hash: str):
     """Fetch block, parse txs, write to DB."""
