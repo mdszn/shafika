@@ -9,6 +9,7 @@ from common.queue import RedisQueueManager
 from common.db import SessionLocal
 from db.models.models import Block, Transaction, WorkerStatus
 from common.failedjob import FailedJobManager
+from common.token import TokenMetadata
 
 
 class BlockProcessor:
@@ -18,7 +19,7 @@ class BlockProcessor:
   executor: ThreadPoolExecutor
   failed_job: FailedJobManager
 
-  def __init__(self, queue_name: str = "blocks", max_workers: int = 10):
+  def __init__(self, queue_name: str = "blocks", max_workers: int = 1):
     load_dotenv()
     http_url = os.getenv("ETH_HTTP_URL")
     self.web3 = Web3(Web3.HTTPProvider(http_url))
@@ -26,6 +27,7 @@ class BlockProcessor:
     self.queue_name = queue_name
     self.executor = ThreadPoolExecutor(max_workers=max_workers)
     self.failed_job = FailedJobManager(queue_name, 'process_block')
+    self.token = TokenMetadata(self.web3)
 
   def run(self):
     print(f"Worker listening on queue '{self.queue_name}'...")
@@ -95,6 +97,14 @@ class BlockProcessor:
 
   def _parse_transaction(self, tx: BlockData, block_number, block_hash, block_ts):
     """Parse a single transaction (runs in thread pool)."""
+    
+    eth_price = self.token.get_eth_price(self.queue.client)
+    
+    tx_value = int(tx['value'])
+    wei = self.web3.from_wei(tx_value, 'ether')
+    
+    value_usd = float(wei) * eth_price if eth_price else None
+    
     return Transaction(
       tx_hash=tx['hash'].hex(),
       block_number=block_number,
@@ -102,7 +112,8 @@ class BlockProcessor:
       block_timestamp=block_ts,
       from_address=tx.get('from'),
       to_address=tx.get('to'),
-      value=int(tx['value']),
+      value=tx_value,
+      value_usd=value_usd,
       gas_used=tx.get('gas'),
       gas_price=int(tx.get('gasPrice', 0)),
       input=tx.get('input'),
