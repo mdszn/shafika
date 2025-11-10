@@ -1,0 +1,12 @@
+{
+  "include": [
+    "services",
+    "libs/common/src"
+  ],
+  "typeCheckingMode": "basic",
+  "reportMissingTypeStubs": false,
+  "reportMissingImports": true,
+  "reportUndefinedVariable": true,
+  "reportTypedDictNotRequiredAccess": "warning"
+}
+

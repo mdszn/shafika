@@ -23,7 +23,7 @@ def get_db_connection():
   """Get a psycopg2 connection to Postgres (for migrations)."""
   return psycopg2.connect(
     host=os.getenv("POSTGRES_HOST"),
-    port=int(os.getenv("POSTGRES_PORT")),
+    port=5432,
     database=os.getenv("POSTGRES_DB"),
     user=os.getenv("POSTGRES_USER"),
     password=os.getenv("POSTGRES_PASSWORD")
