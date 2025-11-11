@@ -1,0 +1,141 @@
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:17-alpine
+    container_name: eth-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-eth_indexer}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-eth_indexer}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache & Queue
+  redis:
+    image: redis:7-alpine
+    container_name: eth-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Database Initialization (runs once on startup)
+  db-init:
+    build:
+      context: .
+      dockerfile: services/block-processor/Dockerfile
+    container_name: eth-db-init
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+    volumes:
+      - ./scripts/init_db.py:/app/init_db.py
+    command: python /app/init_db.py
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  # Block Poller Service
+  block-poller:
+    build:
+      context: .
+      dockerfile: services/block-poller/Dockerfile
+    container_name: eth-block-poller
+    env_file:
+      - .env
+    environment:
+      PYTHONUNBUFFERED: 1
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Block Processor Service
+  block-processor:
+    build:
+      context: .
+      dockerfile: services/block-processor/Dockerfile
+    container_name: eth-block-processor
+    env_file:
+      - .env
+    environment:
+      PYTHONUNBUFFERED: 1
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  # Log Poller Service
+  log-poller:
+    build:
+      context: .
+      dockerfile: services/log-poller/Dockerfile
+    container_name: eth-log-poller
+    env_file:
+      - .env
+    environment:
+      PYTHONUNBUFFERED: 1
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Log Processor Service
+  log-processor:
+    build:
+      context: .
+      dockerfile: services/log-processor/Dockerfile
+    container_name: eth-log-processor
+    env_file:
+      - .env
+    environment:
+      PYTHONUNBUFFERED: 1
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  default:
+    name: eth-network
+
