@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from common.queue import RedisQueueManager
 from db.models.models import JobType, BlockJob
 
+
 class BlockPoller:
     http_url: str
     ws_url: str
@@ -13,24 +14,26 @@ class BlockPoller:
     queue_name: str
 
     def __init__(self, queue_name: str = "blocks"):
-      load_dotenv()
-      ws_url = os.getenv("ETH_WS_URL")
-      http_url = os.getenv("ETH_HTTP_URL")
-      
-      if not ws_url:
-        raise ValueError("ETH_WS_URL not set in environment")
-      if not http_url:
-        raise ValueError("ETH_HTTP_URL not set in environment")
-      
-      self.ws_url = ws_url
-      self.http_url = http_url
-      self.queue = RedisQueueManager()
-      self.queue_name = queue_name
+        load_dotenv()
+        ws_url = os.getenv("ETH_WS_URL")
+        http_url = os.getenv("ETH_HTTP_URL")
+
+        if not ws_url:
+            raise ValueError("ETH_WS_URL not set in environment")
+        if not http_url:
+            raise ValueError("ETH_HTTP_URL not set in environment")
+
+        self.ws_url = ws_url
+        self.http_url = http_url
+        self.queue = RedisQueueManager()
+        self.queue_name = queue_name
 
     async def stream_new_block(self):
+        print(f"Starting block poller")
         while True:
             try:
                 async with connect(self.ws_url) as ws:
+                    print("Connected to Ethereum node")
                     await ws.send(
                         json.dumps(
                             {
@@ -41,7 +44,9 @@ class BlockPoller:
                             }
                         )
                     )
-                    await ws.recv()
+                    subscription_response = await ws.recv()
+                    print(f"Subscribed to newHeads: {subscription_response}")
+
                     while True:
                         message = await asyncio.wait_for(ws.recv(), timeout=60)
                         payload = json.loads(message)
@@ -51,7 +56,7 @@ class BlockPoller:
                             if block_number_hex:
                                 block_number = int(block_number_hex, 16)
                                 block_hash = header.get("hash")
-                                print(f"Pushing block {block_number} into queue")
+                                print(f"New block {block_number} - pushing to queue")
                                 job_id = f"block:{block_number}"
                                 job_data: BlockJob = {
                                     "job_type": JobType.BLOCK.value,
@@ -61,5 +66,7 @@ class BlockPoller:
                                 }
                                 self.queue.push_json(self.queue_name, job_id, job_data)
                             yield header
-            except Exception:
+            except Exception as e:
+                print(f"ERROR: {type(e).__name__}: {e}")
+                print("Reconnecting in 2 seconds...")
                 await asyncio.sleep(2)
