@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from common.queue import RedisQueueManager
 from common.db import SessionLocal
 from common.token import TokenMetadata
-from db.models.models import LogJob, Transfer
+from db.models.models import LogJob, Transfer, JobType
 from eth_abi.abi import decode
 from common.failedjob import FailedJobManager
 
@@ -37,7 +37,7 @@ class LogProcessor:
         self.queue_name = queue_name
         self.executor = ThreadPoolExecutor(max_workers=max_workers)
         self.token_service = TokenMetadata(self.web3)
-        self.failed_job = FailedJobManager(queue_name, "process_log")
+        self.failed_job = FailedJobManager(queue_name, JobType.LOG)
 
     def run(self):
         """Main loop: pull jobs from Redis and process them"""
