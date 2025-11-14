@@ -1,4 +1,4 @@
-.PHONY: help build build-% up down logs logs-% shell-% clean restart restart-% ps migrate init
+.PHONY: help build build-% up down logs logs-% shell-% clean restart restart-% ps migrate init scale
 
 # Colors for output
 BLUE := \033[0;34m
@@ -15,6 +15,7 @@ help: ## Show this help message
 	@echo "  make build-block-poller    # Build only block-poller"
 	@echo "  make restart-log-processor # Restart only log-processor"
 	@echo "  make logs-redis            # View redis logs"
+	@echo "  make scale BLOCK=8 LOG=4   # Scale to 8 block & 4 log processors"
 
 # Build all services
 build: ## Build all Docker images
@@ -35,6 +36,14 @@ up: ## Start all services in detached mode
 up-%: ## Start specific service (e.g., make up-block-poller)
 	@echo "$(GREEN)Starting $*...$(NC)"
 	docker-compose up -d $*
+
+# Scale workers (default: 4 block, 2 log processors)
+scale: ## Scale worker services (e.g., make scale BLOCK=4 LOG=2)
+	@echo "$(GREEN)Scaling workers...$(NC)"
+	@echo "  Block Processors: $(or $(BLOCK),4)"
+	@echo "  Log Processors: $(or $(LOG),2)"
+	docker-compose up -d --scale block-processor=$(or $(BLOCK),4) --scale log-processor=$(or $(LOG),2)
+	@echo "$(GREEN)Workers scaled!$(NC)"
 
 # Initialize database (runs automatically on first 'make up')
 init: ## Manually initialize database tables
