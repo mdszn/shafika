@@ -1,4 +1,5 @@
 import os
+import time
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from sqlalchemy.orm import Session
@@ -8,9 +9,10 @@ from typing import cast
 from dotenv import load_dotenv
 from common.queue import RedisQueueManager
 from common.db import SessionLocal
-from db.models.models import Block, Transaction, WorkerStatus
+from db.models.models import Block, Transaction, WorkerStatus, JobType
 from common.failedjob import FailedJobManager
 from common.token import TokenMetadata
+from requests.exceptions import HTTPError
 
 
 class BlockProcessor:
@@ -27,7 +29,7 @@ class BlockProcessor:
         self.queue = RedisQueueManager()
         self.queue_name = queue_name
         self.executor = ThreadPoolExecutor(max_workers=max_workers)
-        self.failed_job = FailedJobManager(queue_name, "process_block")
+        self.failed_job = FailedJobManager(queue_name, JobType.BLOCK)
         self.token = TokenMetadata(self.web3)
 
     def run(self):
@@ -60,6 +62,26 @@ class BlockProcessor:
                         f"CRITICAL: Could not record failure for {job_id} - left in Redis"
                     )
 
+    def _fetch_block_with_retry(self, block_number: int, max_retries: int = 5):
+        """Fetch block from Web3 with exponential backoff for rate limiting."""
+        for attempt in range(max_retries):
+            try:
+                return self.web3.eth.get_block(block_number, full_transactions=True)
+            except HTTPError as e:
+                if e.response.status_code == 429:
+                    wait_time = (2**attempt) + (attempt * 0.5)  # Exponential backoff
+                    print(
+                        f"  Rate limited (429) on block {block_number}, retrying in {wait_time:.1f}s (attempt {attempt + 1}/{max_retries})"
+                    )
+                    time.sleep(wait_time)
+                    if attempt == max_retries - 1:
+                        raise
+                else:
+                    raise
+            except Exception as e:
+                # For non-rate-limit errors, fail immediately
+                raise
+
     def process_block(self, block_number: int, block_hash: str):
         """Fetch block, parse txs, write to DB."""
         session = SessionLocal()
@@ -74,7 +96,7 @@ class BlockProcessor:
             session.add(block_record)
             session.commit()
 
-            block = self.web3.eth.get_block(block_number, full_transactions=True)
+            block = self._fetch_block_with_retry(block_number)
             block_ts = datetime.fromtimestamp(block["timestamp"])  # pyright: ignore - always present
             tx_count = len(block["transactions"])  # pyright: ignore - always present
             print(f"  Processing {tx_count} txs from block {block_number}")
