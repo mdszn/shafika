@@ -56,7 +56,7 @@ class BlockProcessor:
                 print(f"Processing Block {block_number}")
 
             try:
-                self.process_block(block_number, block_hash)
+                self.process_block(block_number, block_hash, block_status)
                 self.queue.delete_job(job_id)
 
                 # If this was a retry, remove from failed_jobs table
@@ -96,19 +96,27 @@ class BlockProcessor:
                 # For non-rate-limit errors, fail immediately
                 raise
 
-    def process_block(self, block_number: int, block_hash: str):
+    def process_block(self, block_number: int, block_hash: str, block_status: str):
         """Fetch block, parse txs, write to DB."""
         session = SessionLocal()
         block_record = None
 
         try:
-            block_record = Block(
-                block_number=block_number,
-                block_hash=block_hash,
-                worker_status=WorkerStatus.PROCESSING,
-            )
-            session.add(block_record)
-            session.commit()
+            # For new blocks, create the record
+            if block_status == "new":
+                block_record = Block(
+                    block_number=block_number,
+                    block_hash=block_hash,
+                    worker_status=WorkerStatus.PROCESSING,
+                )
+                session.add(block_record)
+            # For retries, fetch existing record to update in same transaction
+            else:
+                block_record = (
+                    session.query(Block)
+                    .filter(Block.block_number == block_number)
+                    .first()
+                )
 
             block = self._fetch_block_with_retry(block_number)
             block_ts = datetime.fromtimestamp(block["timestamp"])  # pyright: ignore - always present
@@ -130,7 +138,10 @@ class BlockProcessor:
                 except Exception as e:
                     print(f"  Error parsing tx: {e}")
 
-            block_record.worker_status = WorkerStatus.DONE  # pyright: ignore
+            # Update block status to DONE (for both new and retry)
+            if block_record:
+                block_record.worker_status = WorkerStatus.DONE  # pyright: ignore
+
             session.commit()
             print(f"  Block {block_number} completed ({tx_count} txs)")
 
