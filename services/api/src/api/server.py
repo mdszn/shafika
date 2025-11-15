@@ -5,7 +5,7 @@ REST API Server for Ethereum Indexer
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from sqlalchemy import desc
-from common.db import SessionLocal
+from common.failedjob import FailedJobManager
 from db.models.models import Transfer
 from common.queue import RedisQueueManager
 from db.models.models import JobType, BlockJob
@@ -20,17 +20,33 @@ def health():
     """Health check endpoint."""
     return jsonify({"status": "healthy", "service": "ethereum-indexer-api"})
 
+@app.route("/api/redrive-blocks", methods=["POST"])
+def redrive_failed_jobs():
+    try:
+        failed_blocks = FailedJobManager('blocks', JobType.BLOCK)
+        success = failed_blocks.redrive_failed_blocks()
+        
+        if success:
+            return jsonify({"status": "starting redrive on failed blocks"}), 200
+        else:
+            return jsonify({"status": "internal server error"}), 500
+    except Exception as e:
+        return jsonify({
+            "error": "Failed to redrive blocks",
+            "details": str(e)
+        }), 500
+
+    
 
 @app.route("/api/queue-blocks", methods=["POST"])
 def queue_blocks():
     """Queue a range of blocks for processing."""
-    # Validate JSON request
+    
     if not request.is_json:
         return jsonify({"error": "Content-Type must be application/json"}), 400
 
     data = request.get_json()
 
-    # Validate required fields
     if "start" not in data or "end" not in data:
         return jsonify({"error": "Missing required fields: start, end"}), 400
 
@@ -40,14 +56,12 @@ def queue_blocks():
     except (ValueError, TypeError):
         return jsonify({"error": "start and end must be integers"}), 400
 
-    # Validate range
     if start < 0 or end < 0:
         return jsonify({"error": "Block numbers must be non-negative"}), 400
 
     if start > end:
         return jsonify({"error": "start must be <= end"}), 400
 
-    # Limit range to prevent abuse (adjust as needed)
     MAX_RANGE = 10000
     block_count = end - start + 1
     if block_count > MAX_RANGE:
@@ -61,7 +75,6 @@ def queue_blocks():
             400,
         )
 
-    # Queue blocks
     try:
         queued = 0
         for i in range(start, end + 1):
@@ -85,7 +98,3 @@ def queue_blocks():
     except Exception as e:
         return jsonify({"error": "Failed to queue blocks", "details": str(e)}), 500
 
-
-@app.errorhandler(500)
-def internal_error(error):
-    return jsonify({"error": "Internal server error"}), 500
