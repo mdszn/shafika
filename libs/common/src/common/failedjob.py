@@ -54,6 +54,7 @@ class FailedJobManager:
 
             for job in failed_jobs:
                 job_data = cast(BlockJob, job.data)
+                job_data["status"] = "retrying"
                 self.redis_client.push_json("blocks", job.job_id, job_data)  # pyright: ignore
                 job.status = WorkerStatus.RETRYING  # pyright: ignore
                 job.retries += 1  # pyright: ignore
@@ -65,6 +66,27 @@ class FailedJobManager:
 
         except Exception as e:
             print(f"Failed trying to redrive failed jobs: {e}")
+            session.rollback()
+            return False
+        finally:
+            session.close()
+
+    def remove_failed_block_record(self, job_id: str):
+        """Remove a successfully reprocessed job from the failed_jobs table."""
+        session = SessionLocal()
+
+        try:
+            deleted_count = (
+                session.query(FailedJob).filter(FailedJob.job_id == job_id).delete()
+            )
+            session.commit()
+
+            if deleted_count > 0:
+                return True
+            else:
+                return False
+        except Exception as e:
+            print(f"Failed trying to delete failed job record {job_id}: {e}")
             session.rollback()
             return False
         finally:

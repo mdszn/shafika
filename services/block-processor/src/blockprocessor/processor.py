@@ -48,11 +48,25 @@ class BlockProcessor:
             block_number = job.get("block_number")
             block_hash = job.get("block_hash")
             block_status = job.get("status")
-            print(f"Processing Block {block_number}")
+            is_retry = block_status == "retrying"
+
+            if is_retry:
+                print(f"Processing Block {block_number} (RETRY)")
+            else:
+                print(f"Processing Block {block_number}")
 
             try:
                 self.process_block(block_number, block_hash)
                 self.queue.delete_job(job_id)
+
+                # If this was a retry, remove from failed_jobs table
+                if is_retry:
+                    if self.failed_job.remove_failed_block_record(job_id):
+                        print(f"  Removed {job_id} from failed_jobs table")
+                    else:
+                        print(
+                            f"  Warning: Could not remove {job_id} from failed_jobs table"
+                        )
             except Exception as e:
                 print(f"Error processing block {block_number}: {e}")
                 if self.failed_job.record(job_id, job, str(e)):
