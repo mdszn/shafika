@@ -9,7 +9,14 @@ from dotenv import load_dotenv
 from common.queue import RedisQueueManager
 from common.db import SessionLocal
 from common.token import TokenMetadata
-from db.models.models import LogJob, Transfer, Approval, AddressStats, JobType
+from db.models.models import (
+    LogJob,
+    Transfer,
+    Approval,
+    AddressStats,
+    NftMetadata,
+    JobType,
+)
 from eth_abi.abi import decode
 from common.failedjob import FailedJobManager
 
@@ -191,6 +198,16 @@ class LogProcessor:
             raw_log=job,
         )
 
+        # Create NFT metadata record for ERC721
+        if token_type == "erc721" and token_id is not None and to_address:
+            self._create_nft_metadata(
+                token_address=token_address.lower(),
+                token_id=token_id,
+                owner=to_address.lower(),
+                block_number=block_number,
+                tx_hash=tx_hash,
+            )
+
     def _process_erc1155_single(self, job: LogJob, topics: list[str]):
         """Process ERC1155 TransferSingle event"""
         if len(topics) < 4:
@@ -237,6 +254,16 @@ class LogProcessor:
             normalized_amount=float(amount),
             raw_log=job,
         )
+
+        # Create NFT metadata record for ERC1155
+        if to_address:
+            self._create_nft_metadata(
+                token_address=token_address.lower(),
+                token_id=token_id,
+                owner=to_address.lower(),
+                block_number=block_number,
+                tx_hash=tx_hash,
+            )
 
     def _process_erc1155_batch(self, job: LogJob, topics: list[str]):
         """Process ERC1155 TransferBatch event - creates multiple transfer records"""
@@ -301,6 +328,16 @@ class LogProcessor:
                     normalized_amount=float(amount),
                     raw_log=job,
                 )
+
+                # Create NFT metadata record for each token in batch
+                if to_address:
+                    self._create_nft_metadata(
+                        token_address=token_address.lower(),
+                        token_id=token_id,
+                        owner=to_address.lower(),
+                        block_number=block_number,
+                        tx_hash=tx_hash,
+                    )
 
             print(f"  ✓ Saved {len(ids)} ERC1155 batch transfers")
 
@@ -447,3 +484,49 @@ class LogProcessor:
         if isinstance(value, str):
             return int(value, 16)
         return None
+
+    def _create_nft_metadata(
+        self,
+        token_address: str,
+        token_id: int,
+        owner: str,
+        block_number: int,
+        tx_hash: str,
+    ):
+        """Create or update NFT metadata record"""
+        session = SessionLocal()
+        try:
+            # Check if NFT already exists
+            existing = (
+                session.query(NftMetadata)
+                .filter(
+                    NftMetadata.token_address == token_address,
+                    NftMetadata.token_id == token_id,
+                )
+                .first()
+            )
+
+            if existing:
+                # Update owner on transfer
+                existing.owner = owner  # type: ignore
+                existing.updated_at = func.now()  # type: ignore
+            else:
+                # Create new NFT metadata record
+                nft = NftMetadata(
+                    token_address=token_address,
+                    token_id=token_id,
+                    owner=owner,
+                    first_seen_block=block_number,
+                    first_seen_tx=tx_hash,
+                    metadata_fetched=False,  # Will be fetched by worker
+                )
+                session.add(nft)
+
+            session.commit()
+        except IntegrityError:
+            session.rollback()  # Duplicate, ignore
+        except Exception as e:
+            session.rollback()
+            print(f"  Error creating NFT metadata: {e}")
+        finally:
+            session.close()

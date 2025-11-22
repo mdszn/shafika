@@ -1,0 +1,21 @@
+[project]
+name = "nft-metadata-worker"
+version = "0.1.0"
+description = "NFT metadata fetcher worker"
+requires-python = ">=3.11"
+dependencies = [
+    "common",
+    "web3",
+    "requests",
+    "python-dotenv",
+    "sqlalchemy",
+    "psycopg2-binary",
+]
+
+[project.scripts]
+nft-metadata-worker = "nftworker.__main__:main"
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+

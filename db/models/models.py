@@ -141,6 +141,33 @@ class Approval(Base):
     value = Column(Numeric(78, 0), nullable=False)
 
 
+class NftMetadata(Base):
+    __tablename__ = "nft_metadata"
+    token_address = Column(String(42), primary_key=True)
+    token_id = Column(Numeric(78, 0), primary_key=True)
+
+    # On-chain data
+    token_uri = Column(Text, nullable=True)
+    owner = Column(String(42), index=True)
+
+    # Off-chain metadata (fetched from token_uri)
+    name = Column(Text, nullable=True)
+    description = Column(Text, nullable=True)
+    image_url = Column(Text, nullable=True)
+    external_url = Column(Text, nullable=True)
+    animation_url = Column(Text, nullable=True)
+    attributes = Column(JSON, nullable=True)
+    
+    metadata_fetched = Column(Boolean, default=False, index=True)
+    metadata_fetch_failed = Column(Boolean, default=False)
+    metadata_fetch_error = Column(Text, nullable=True)
+    last_fetched_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    first_seen_block = Column(BigInteger, nullable=False, index=True)
+    first_seen_tx = Column(String(66), nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), onupdate=func.now())
+
+
 class AddressStats(Base):
     __tablename__ = "address_stats"
     address = Column(String(42), primary_key=True)

@@ -153,6 +153,25 @@ services:
         condition: service_completed_successfully
     restart: unless-stopped
 
+  # NFT Metadata Worker Service
+  nft-metadata-worker:
+    build:
+      context: .
+      dockerfile: services/nft-metadata-worker/Dockerfile
+    container_name: eth-nft-metadata-worker
+    env_file:
+      - .env
+    environment:
+      PYTHONUNBUFFERED: 1
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+    depends_on:
+      postgres:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
 volumes:
   postgres_data:
   redis_data:
