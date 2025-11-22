@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Optional
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func
+from sqlalchemy.dialects.postgresql import insert
 from web3 import Web3
 from dotenv import load_dotenv
 from common.queue import RedisQueueManager
@@ -373,31 +374,37 @@ class LogProcessor:
     def _update_token_transfer_stats(
         self, session, address: str, block_number: int, sent: bool
     ):
-        """Update token transfer counts for address"""
-        stats = (
-            session.query(AddressStats)
-            .filter(AddressStats.address == address.lower())
-            .first()
+        """Update token transfer counts for address using upsert to avoid deadlocks"""
+        address_lower = address.lower()
+
+        # Use PostgreSQL's INSERT ... ON CONFLICT DO UPDATE (upsert)
+        stmt = insert(AddressStats).values(
+            address=address_lower,
+            first_seen_block=block_number,
+            last_seen_block=block_number,
+            token_transfers_sent=1 if sent else 0,
+            token_transfers_received=0 if sent else 1,
         )
 
-        if not stats:
-            # Create new record
-            stats = AddressStats(
-                address=address.lower(),
-                first_seen_block=block_number,
-                last_seen_block=block_number,
-                token_transfers_sent=1 if sent else 0,
-                token_transfers_received=0 if sent else 1,
-            )
-            session.add(stats)
+        # On conflict, update the existing record
+        update_dict = {
+            "last_seen_block": block_number,
+            "updated_at": func.now(),
+        }
+
+        if sent:
+            update_dict["token_transfers_sent"] = AddressStats.token_transfers_sent + 1
         else:
-            # Update existing record
-            stats.last_seen_block = block_number  # type: ignore
-            if sent:
-                stats.token_transfers_sent += 1  # type: ignore
-            else:
-                stats.token_transfers_received += 1  # type: ignore
-            stats.updated_at = func.now()  # type: ignore
+            update_dict["token_transfers_received"] = (
+                AddressStats.token_transfers_received + 1
+            )
+
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["address"],
+            set_=update_dict,
+        )
+
+        session.execute(stmt)
 
     def _decode_address(self, topic: str) -> Optional[str]:
         """Decode address from indexed topic (32 bytes padded)"""

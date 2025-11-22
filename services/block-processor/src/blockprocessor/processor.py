@@ -3,7 +3,7 @@ import time
 from datetime import datetime
 from sqlalchemy.orm import Session
 from web3 import Web3
-from web3.types import BlockData, TxData
+from web3.types import BlockData, TxData, RPCEndpoint
 from typing import cast
 from dotenv import load_dotenv
 from common.queue import RedisQueueManager
@@ -20,6 +20,7 @@ from common.failedjob import FailedJobManager
 from common.token import TokenMetadata
 from requests.exceptions import HTTPError
 from sqlalchemy import func
+from sqlalchemy.dialects.postgresql import insert
 
 
 class BlockProcessor:
@@ -131,17 +132,18 @@ class BlockProcessor:
             for tx in block["transactions"]:  # pyright: ignore - always present
                 tx_data = cast(TxData, tx)
 
-                # Check for contract creation
-                self._check_contract_creation(tx_data, block_number, block_ts, session)
-
+                # Use a savepoint for each transaction so one failure doesn't abort the whole block
+                savepoint = session.begin_nested()
                 try:
-                    # Parse transaction
+                    self._check_contract_creation(
+                        tx_data, block_number, block_ts, session
+                    )
+
                     tx_model = self._parse_transaction(
                         tx_data, block_number, block_hash, block_ts
                     )
                     session.add(tx_model)
 
-                    # Update address stats for sender
                     if tx_model.from_address:  # type: ignore
                         self._update_address_stats(
                             session,
@@ -150,7 +152,6 @@ class BlockProcessor:
                             eth_sent=tx_model.value,  # type: ignore
                         )
 
-                    # Update address stats for receiver
                     if tx_model.to_address:  # type: ignore
                         # Check if receiver is a contract
                         is_contract = (
@@ -167,8 +168,11 @@ class BlockProcessor:
                             eth_received=tx_model.value,  # type: ignore
                             is_contract=is_contract,
                         )
+
+                    savepoint.commit()  # Commit the savepoint
                 except Exception as e:
-                    print(f"  Error parsing tx: {e}")
+                    savepoint.rollback()  # Rollback just this transaction
+                    print(f"  Error parsing tx {tx_data.get('hash', 'unknown')}: {e}")
 
             if block_record:
                 block_record.worker_status = WorkerStatus.DONE  # pyright: ignore
@@ -256,37 +260,41 @@ class BlockProcessor:
         is_contract: bool = False,
         contract_deployment: bool = False,
     ):
-        """Update or create address stats"""
-        stats = (
-            session.query(AddressStats)
-            .filter(AddressStats.address == address.lower())
-            .first()
+        """Update or create address stats using upsert to avoid deadlocks"""
+        address_lower = address.lower()
+
+        # Use PostgreSQL's INSERT ... ON CONFLICT DO UPDATE (upsert)
+        stmt = insert(AddressStats).values(
+            address=address_lower,
+            first_seen_block=block_number,
+            last_seen_block=block_number,
+            tx_count=1,
+            eth_received=eth_received,
+            eth_sent=eth_sent,
+            contract_deployments=1 if contract_deployment else 0,
+            is_contract=is_contract,
         )
 
-        if not stats:
-            # Create new record
-            stats = AddressStats(
-                address=address.lower(),
-                first_seen_block=block_number,
-                last_seen_block=block_number,
-                tx_count=1,
-                eth_received=eth_received,
-                eth_sent=eth_sent,
-                contract_deployments=1 if contract_deployment else 0,
-                is_contract=is_contract,
-            )
-            session.add(stats)
-        else:
-            # Update existing record
-            stats.last_seen_block = block_number  # type: ignore
-            stats.tx_count += 1  # type: ignore
-            stats.eth_received += eth_received  # type: ignore
-            stats.eth_sent += eth_sent  # type: ignore
-            if contract_deployment:
-                stats.contract_deployments += 1  # type: ignore
-            if is_contract:
-                stats.is_contract = True  # type: ignore
-            stats.updated_at = func.now()  # type: ignore
+        # On conflict, update the existing record
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["address"],
+            set_={
+                "last_seen_block": block_number,
+                "tx_count": AddressStats.tx_count + 1,
+                "eth_received": AddressStats.eth_received + eth_received,
+                "eth_sent": AddressStats.eth_sent + eth_sent,
+                "contract_deployments": AddressStats.contract_deployments
+                + (1 if contract_deployment else 0),
+                "is_contract": (
+                    stmt.excluded.is_contract
+                    if is_contract
+                    else AddressStats.is_contract
+                ),
+                "updated_at": func.now(),
+            },
+        )
+
+        session.execute(stmt)
 
     def _mark_error(self, session: Session, block_record, block_number, error):
         """Mark block as error in DB."""
