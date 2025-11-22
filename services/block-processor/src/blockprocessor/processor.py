@@ -9,7 +9,7 @@ from typing import cast
 from dotenv import load_dotenv
 from common.queue import RedisQueueManager
 from common.db import SessionLocal
-from db.models.models import Block, Transaction, WorkerStatus, JobType
+from db.models.models import Block, Transaction, Contract, WorkerStatus, JobType
 from common.failedjob import FailedJobManager
 from common.token import TokenMetadata
 from requests.exceptions import HTTPError
@@ -110,7 +110,7 @@ class BlockProcessor:
                     worker_status=WorkerStatus.PROCESSING,
                 )
                 session.add(block_record)
-            # For retries, fetch existing record to update in same transaction
+            
             else:
                 block_record = (
                     session.query(Block)
@@ -131,14 +131,15 @@ class BlockProcessor:
                 )
                 futures.append(future)
 
+                self._check_contract_creation(tx_data, block_number, block_ts, session)
+
             for future in as_completed(futures):
                 try:
                     tx_model = future.result()
                     session.add(tx_model)
                 except Exception as e:
                     print(f"  Error parsing tx: {e}")
-
-            # Update block status to DONE (for both new and retry)
+            
             if block_record:
                 block_record.worker_status = WorkerStatus.DONE  # pyright: ignore
 
@@ -176,6 +177,37 @@ class BlockProcessor:
             input=tx.get("input"),
             status=1,
         )
+
+    def _check_contract_creation(
+        self, tx: TxData, block_number, block_ts, session: Session
+    ):
+        """Check if transaction is a contract creation and store it."""
+        # Contract creation: transaction with no 'to' address
+        if tx.get("to") is None:
+            tx_hash = tx["hash"]  # pyright: ignore
+
+            try:
+                receipt = self.web3.eth.get_transaction_receipt(tx_hash)
+                contract_address = receipt.get("contractAddress")
+
+                if contract_address:
+                    bytecode = self.web3.eth.get_code(contract_address)
+                    bytecode_hash = (
+                        self.web3.keccak(bytecode).hex() if bytecode else None
+                    )
+
+                    contract = Contract(
+                        contract_address=contract_address,
+                        deployer_address=tx.get("from"),
+                        deployment_tx_hash=tx_hash.hex(),
+                        deployment_block_number=block_number,
+                        deployment_timestamp=block_ts,
+                        bytecode_hash=bytecode_hash,
+                    )
+                    session.add(contract)
+                    print(f"  Contract deployed: {contract_address}")
+            except Exception as e:
+                print(f"  Error processing contract creation {tx_hash}: {e}")
 
     def _mark_error(self, session: Session, block_record, block_number, error):
         """Mark block as error in DB."""
