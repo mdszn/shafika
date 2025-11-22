@@ -1,14 +1,14 @@
 import os
 from datetime import datetime
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy import func
 from web3 import Web3
 from dotenv import load_dotenv
 from common.queue import RedisQueueManager
 from common.db import SessionLocal
 from common.token import TokenMetadata
-from db.models.models import LogJob, Transfer, JobType
+from db.models.models import LogJob, Transfer, Approval, AddressStats, JobType
 from eth_abi.abi import decode
 from common.failedjob import FailedJobManager
 
@@ -19,23 +19,24 @@ TRANSFER_EVENT_SIGNATURE = (
 )
 ERC1155_TRANSFER_SINGLE = "0xc3d58168c5ae7397731d063d5bbf3d657854427343f4c083240f7aacaa2d0f62"  # TransferSingle
 ERC1155_TRANSFER_BATCH = "0x4a39dc06d4c0dbc64b70af90fd698a233a518aa5d07e595d983b8c0526c8f7fb"  # TransferBatch
+APPROVAL_EVENT_SIGNATURE = (
+    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925"
+)
 
 
 class LogProcessor:
     web3: Web3
     queue: RedisQueueManager
     queue_name: str
-    executor: ThreadPoolExecutor
     token_service: TokenMetadata
     failed_job: FailedJobManager
 
-    def __init__(self, queue_name: str = "logs", max_workers: int = 10000):
+    def __init__(self, queue_name: str = "logs"):
         load_dotenv()
         http_url = os.getenv("ETH_HTTP_URL")
         self.web3 = Web3(Web3.HTTPProvider(http_url))
         self.queue = RedisQueueManager()
         self.queue_name = queue_name
-        self.executor = ThreadPoolExecutor(max_workers=max_workers)
         self.token_service = TokenMetadata(self.web3)
         self.failed_job = FailedJobManager(queue_name, JobType.LOG)
 
@@ -76,10 +77,54 @@ class LogProcessor:
 
         if event_signature == TRANSFER_EVENT_SIGNATURE:
             self._process_erc20_or_erc721_transfer(job, topics)
+        elif event_signature == APPROVAL_EVENT_SIGNATURE:
+            self._process_approval_event(job, topics)
         elif event_signature == ERC1155_TRANSFER_SINGLE:
             self._process_erc1155_single(job, topics)
         elif event_signature == ERC1155_TRANSFER_BATCH:
             self._process_erc1155_batch(job, topics)
+
+    def _process_approval_event(self, job: LogJob, topics: list[str]):
+        """Process ERC20 Approval event"""
+        if len(topics) < 3:
+            return
+
+        tx_hash = job.get("transaction_hash")
+        log_index = self._parse_log_index(job.get("log_index"))
+        block_number = job.get("block_number")
+        block_timestamp = self._parse_timestamp(job.get("block_timestamp"))
+        token_address = job.get("address")
+
+        owner = "0x" + topics[1][-40:]
+        spender = "0x" + topics[2][-40:]
+
+        data = job.get("data", "0x")
+        if data and data != "0x":
+            value = int(data, 16)
+        else:
+            value = 0
+
+        session = SessionLocal()
+        try:
+            approval = Approval(
+                tx_hash=tx_hash,
+                log_index=log_index,
+                block_number=block_number,
+                block_timestamp=block_timestamp,
+                token_address=token_address.lower(),
+                owner=owner.lower(),
+                spender=spender.lower(),
+                value=value,
+            )
+            session.add(approval)
+            session.commit()
+        except IntegrityError:
+            session.rollback()
+        except Exception as e:
+            session.rollback()
+            print(f"  Error saving approval: {e}")
+        finally:
+            session.close()
 
     def _process_erc20_or_erc721_transfer(self, job: LogJob, topics: list[str]):
         """Process ERC20 or ERC721 Transfer event"""
@@ -269,6 +314,29 @@ class LogProcessor:
         session = SessionLocal()
         try:
             session.add(transfer)
+
+            # Update address stats for sender
+            from_address = kwargs.get("from_address")
+            to_address = kwargs.get("to_address")
+            block_number = kwargs.get("block_number")
+
+            # Exclude burn/mint addresses
+            if (
+                from_address
+                and from_address != "0x0000000000000000000000000000000000000000"
+            ):
+                self._update_token_transfer_stats(
+                    session, from_address, block_number, sent=True  # type: ignore
+                )
+
+            if (
+                to_address
+                and to_address != "0x0000000000000000000000000000000000000000"
+            ):
+                self._update_token_transfer_stats(
+                    session, to_address, block_number, sent=False  # type: ignore
+                )
+
             session.commit()
 
             from_addr = (
@@ -301,6 +369,35 @@ class LogProcessor:
             raise
         finally:
             session.close()
+
+    def _update_token_transfer_stats(
+        self, session, address: str, block_number: int, sent: bool
+    ):
+        """Update token transfer counts for address"""
+        stats = (
+            session.query(AddressStats)
+            .filter(AddressStats.address == address.lower())
+            .first()
+        )
+
+        if not stats:
+            # Create new record
+            stats = AddressStats(
+                address=address.lower(),
+                first_seen_block=block_number,
+                last_seen_block=block_number,
+                token_transfers_sent=1 if sent else 0,
+                token_transfers_received=0 if sent else 1,
+            )
+            session.add(stats)
+        else:
+            # Update existing record
+            stats.last_seen_block = block_number  # type: ignore
+            if sent:
+                stats.token_transfers_sent += 1  # type: ignore
+            else:
+                stats.token_transfers_received += 1  # type: ignore
+            stats.updated_at = func.now()  # type: ignore
 
     def _decode_address(self, topic: str) -> Optional[str]:
         """Decode address from indexed topic (32 bytes padded)"""

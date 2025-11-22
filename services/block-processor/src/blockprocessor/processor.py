@@ -1,7 +1,6 @@
 import os
 import time
 from datetime import datetime
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from sqlalchemy.orm import Session
 from web3 import Web3
 from web3.types import BlockData, TxData
@@ -9,26 +8,32 @@ from typing import cast
 from dotenv import load_dotenv
 from common.queue import RedisQueueManager
 from common.db import SessionLocal
-from db.models.models import Block, Transaction, Contract, WorkerStatus, JobType
+from db.models.models import (
+    Block,
+    Transaction,
+    Contract,
+    AddressStats,
+    WorkerStatus,
+    JobType,
+)
 from common.failedjob import FailedJobManager
 from common.token import TokenMetadata
 from requests.exceptions import HTTPError
+from sqlalchemy import func
 
 
 class BlockProcessor:
     web3: Web3
     queue: RedisQueueManager
     queue_name: str
-    executor: ThreadPoolExecutor
     failed_job: FailedJobManager
 
-    def __init__(self, queue_name: str = "blocks", max_workers: int = 1):
+    def __init__(self, queue_name: str = "blocks"):
         load_dotenv()
         http_url = os.getenv("ETH_HTTP_URL")
         self.web3 = Web3(Web3.HTTPProvider(http_url))
         self.queue = RedisQueueManager()
         self.queue_name = queue_name
-        self.executor = ThreadPoolExecutor(max_workers=max_workers)
         self.failed_job = FailedJobManager(queue_name, JobType.BLOCK)
         self.token = TokenMetadata(self.web3)
 
@@ -110,7 +115,7 @@ class BlockProcessor:
                     worker_status=WorkerStatus.PROCESSING,
                 )
                 session.add(block_record)
-            
+
             else:
                 block_record = (
                     session.query(Block)
@@ -123,23 +128,48 @@ class BlockProcessor:
             tx_count = len(block["transactions"])  # pyright: ignore - always present
             print(f"  Processing {tx_count} txs from block {block_number}")
 
-            futures = []
             for tx in block["transactions"]:  # pyright: ignore - always present
                 tx_data = cast(TxData, tx)
-                future = self.executor.submit(
-                    self._parse_transaction, tx_data, block_number, block_hash, block_ts
-                )
-                futures.append(future)
 
+                # Check for contract creation
                 self._check_contract_creation(tx_data, block_number, block_ts, session)
 
-            for future in as_completed(futures):
                 try:
-                    tx_model = future.result()
+                    # Parse transaction
+                    tx_model = self._parse_transaction(
+                        tx_data, block_number, block_hash, block_ts
+                    )
                     session.add(tx_model)
+
+                    # Update address stats for sender
+                    if tx_model.from_address:  # type: ignore
+                        self._update_address_stats(
+                            session,
+                            tx_model.from_address,  # type: ignore
+                            block_number,
+                            eth_sent=tx_model.value,  # type: ignore
+                        )
+
+                    # Update address stats for receiver
+                    if tx_model.to_address:  # type: ignore
+                        # Check if receiver is a contract
+                        is_contract = (
+                            session.query(Contract)
+                            .filter(Contract.contract_address == tx_model.to_address)
+                            .first()
+                            is not None
+                        )
+
+                        self._update_address_stats(
+                            session,
+                            tx_model.to_address,  # type: ignore
+                            block_number,
+                            eth_received=tx_model.value,  # type: ignore
+                            is_contract=is_contract,
+                        )
                 except Exception as e:
                     print(f"  Error parsing tx: {e}")
-            
+
             if block_record:
                 block_record.worker_status = WorkerStatus.DONE  # pyright: ignore
 
@@ -154,7 +184,7 @@ class BlockProcessor:
             session.close()
 
     def _parse_transaction(self, tx: TxData, block_number, block_hash, block_ts):
-        """Parse a single transaction (runs in thread pool)."""
+        """Parse a single transaction."""
 
         eth_price = self.token.get_eth_price(self.queue.client)
 
@@ -206,8 +236,57 @@ class BlockProcessor:
                     )
                     session.add(contract)
                     print(f"  Contract deployed: {contract_address}")
+
+                    # Update deployer's contract deployment count
+                    deployer = tx.get("from")
+                    if deployer:
+                        self._update_address_stats(
+                            session, deployer, block_number, contract_deployment=True
+                        )
             except Exception as e:
                 print(f"  Error processing contract creation {tx_hash}: {e}")
+
+    def _update_address_stats(
+        self,
+        session: Session,
+        address: str,
+        block_number: int,
+        eth_received: int = 0,
+        eth_sent: int = 0,
+        is_contract: bool = False,
+        contract_deployment: bool = False,
+    ):
+        """Update or create address stats"""
+        stats = (
+            session.query(AddressStats)
+            .filter(AddressStats.address == address.lower())
+            .first()
+        )
+
+        if not stats:
+            # Create new record
+            stats = AddressStats(
+                address=address.lower(),
+                first_seen_block=block_number,
+                last_seen_block=block_number,
+                tx_count=1,
+                eth_received=eth_received,
+                eth_sent=eth_sent,
+                contract_deployments=1 if contract_deployment else 0,
+                is_contract=is_contract,
+            )
+            session.add(stats)
+        else:
+            # Update existing record
+            stats.last_seen_block = block_number  # type: ignore
+            stats.tx_count += 1  # type: ignore
+            stats.eth_received += eth_received  # type: ignore
+            stats.eth_sent += eth_sent  # type: ignore
+            if contract_deployment:
+                stats.contract_deployments += 1  # type: ignore
+            if is_contract:
+                stats.is_contract = True  # type: ignore
+            stats.updated_at = func.now()  # type: ignore
 
     def _mark_error(self, session: Session, block_record, block_number, error):
         """Mark block as error in DB."""

@@ -129,6 +129,35 @@ class Contract(Base):
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
 
+class Approval(Base):
+    __tablename__ = "approvals"
+    tx_hash = Column(String(66), nullable=False, primary_key=True)
+    log_index = Column(BigInteger, nullable=False, primary_key=True)
+    block_number = Column(BigInteger, nullable=False, index=True)
+    block_timestamp = Column(TIMESTAMP(timezone=True), nullable=False, index=True)
+    token_address = Column(String(42), nullable=False, index=True)
+    owner = Column(String(42), nullable=False, index=True)
+    spender = Column(String(42), nullable=False, index=True)
+    value = Column(Numeric(78, 0), nullable=False)
+
+
+class AddressStats(Base):
+    __tablename__ = "address_stats"
+    address = Column(String(42), primary_key=True)
+    first_seen_block = Column(BigInteger, nullable=False)
+    last_seen_block = Column(BigInteger, nullable=False, index=True)
+    tx_count = Column(Integer, default=0)
+    eth_received = Column(Numeric(38, 0), default=0)
+    eth_sent = Column(Numeric(38, 0), default=0)
+    contract_deployments = Column(Integer, default=0)
+    token_transfers_sent = Column(Integer, default=0)
+    token_transfers_received = Column(Integer, default=0)
+    is_contract = Column(Boolean, default=False)
+    updated_at = Column(
+        TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
 class FailedJob(Base):
     __tablename__ = "failed_jobs"
     id = Column(Integer, primary_key=True, autoincrement=True)
