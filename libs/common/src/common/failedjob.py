@@ -55,10 +55,10 @@ class FailedJobManager:
             for job in failed_jobs:
                 job_data = cast(BlockJob, job.data)
                 job_data["status"] = "retrying"
-                self.redis_client.push_json("blocks", job.job_id, job_data)  # pyright: ignore
-                job.status = WorkerStatus.RETRYING  # pyright: ignore
-                job.retries += 1  # pyright: ignore
-                job.last_retry_at = datetime.now()  # pyright: ignore
+                self.redis_client.push_json("blocks", job.job_id, job_data)
+                job.status = WorkerStatus.RETRYING
+                job.retries += 1
+                job.last_retry_at = datetime.now()
 
             print(f"Push {len(failed_jobs)} jobs to 'blocks' queue for retry.")
             session.commit()

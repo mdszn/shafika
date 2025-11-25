@@ -43,7 +43,7 @@ class TokenMetadata:
                 return (
                     token.symbol,
                     token.decimals,
-                )  # pyright: ignore - SQLAlchemy runtime values
+                )
         finally:
             session.close()
 
@@ -53,9 +53,9 @@ class TokenMetadata:
         """Fetch ETH/USD Price"""
 
         if redis_client:
-            cached_price = redis_client.get("eth_price")  # pyright: ignore
+            cached_price = redis_client.get("eth_price")
             if cached_price:
-                return float(cached_price)  # pyright: ignore
+                return float(cached_price)
 
         try:
             endpoint = (

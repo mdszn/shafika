@@ -364,7 +364,7 @@ class LogProcessor:
                 and from_address != "0x0000000000000000000000000000000000000000"
             ):
                 self._update_token_transfer_stats(
-                    session, from_address, block_number, sent=True  # type: ignore
+                    session, from_address, block_number, sent=True
                 )
 
             if (
@@ -372,7 +372,7 @@ class LogProcessor:
                 and to_address != "0x0000000000000000000000000000000000000000"
             ):
                 self._update_token_transfer_stats(
-                    session, to_address, block_number, sent=False  # type: ignore
+                    session, to_address, block_number, sent=False
                 )
 
             session.commit()
@@ -508,8 +508,8 @@ class LogProcessor:
 
             if existing:
                 # Update owner on transfer
-                existing.owner = owner  # type: ignore
-                existing.updated_at = func.now()  # type: ignore
+                existing.owner = owner
+                existing.updated_at = func.now()
             else:
                 # Create new NFT metadata record
                 nft = NftMetadata(

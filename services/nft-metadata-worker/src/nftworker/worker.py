@@ -86,58 +86,58 @@ class NftMetadataWorker:
         """Fetch metadata for a single NFT and update the record"""
         try:
             print(
-                f"  Fetching {nft.token_address[:10]}...#{nft.token_id}"  # type: ignore
+                f"  Fetching {nft.token_address[:10]}...#{nft.token_id}"
             )
 
             # Step 1: Get tokenURI from contract (on-chain)
             token_uri = self.fetcher.get_token_uri(
-                nft.token_address, nft.token_id  # type: ignore
+                nft.token_address, nft.token_id
             )
 
             if token_uri:
-                nft.token_uri = token_uri  # type: ignore
+                nft.token_uri = token_uri
 
                 # Step 2: Fetch metadata from URI (off-chain)
                 metadata = self.fetcher.fetch_metadata_from_uri(token_uri)
 
                 if metadata:
                     # Parse and store metadata fields
-                    nft.name = metadata.get("name")  # type: ignore
-                    nft.description = metadata.get("description")  # type: ignore
-                    nft.external_url = metadata.get("external_url")  # type: ignore
-                    nft.animation_url = metadata.get("animation_url")  # type: ignore
+                    nft.name = metadata.get("name")
+                    nft.description = metadata.get("description")
+                    nft.external_url = metadata.get("external_url")
+                    nft.animation_url = metadata.get("animation_url")
 
                     # Normalize image URL (convert IPFS to gateway)
                     image_url = metadata.get("image")
                     if image_url:
-                        nft.image_url = self.fetcher.normalize_image_url(image_url)  # type: ignore
+                        nft.image_url = self.fetcher.normalize_image_url(image_url)
 
                     # Store attributes as JSON
                     attributes = metadata.get("attributes", [])
-                    nft.attributes = attributes  # type: ignore
+                    nft.attributes = attributes
 
                     # Mark as successfully fetched
-                    nft.metadata_fetched = True  # type: ignore
-                    nft.metadata_fetch_failed = False  # type: ignore
-                    nft.metadata_fetch_error = None  # type: ignore
+                    nft.metadata_fetched = True
+                    nft.metadata_fetch_failed = False
+                    nft.metadata_fetch_error = None
 
-                    print(f"    ✓ {nft.name or 'Unnamed'}")  # type: ignore
+                    print(f"    ✓ {nft.name or 'Unnamed'}")
                 else:
                     # Failed to fetch metadata from URI
-                    nft.metadata_fetch_failed = True  # type: ignore
-                    nft.metadata_fetch_error = "Failed to fetch metadata from URI"  # type: ignore
+                    nft.metadata_fetch_failed = True
+                    nft.metadata_fetch_error = "Failed to fetch metadata from URI"
                     print(f"    ✗ Failed to fetch metadata from URI")
             else:
                 # Failed to get tokenURI
-                nft.metadata_fetch_failed = True  # type: ignore
-                nft.metadata_fetch_error = "Failed to get tokenURI from contract"  # type: ignore
+                nft.metadata_fetch_failed = True
+                nft.metadata_fetch_error = "Failed to get tokenURI from contract"
                 print(f"    ✗ Failed to get tokenURI")
 
         except Exception as e:
-            nft.metadata_fetch_failed = True  # type: ignore
-            nft.metadata_fetch_error = str(e)[:500]  # Truncate long errors  # type: ignore
+            nft.metadata_fetch_failed = True
+            nft.metadata_fetch_error = str(e)[:500]  # Truncate long errors
             print(f"    ✗ Error: {e}")
 
         finally:
-            nft.last_fetched_at = func.now()  # type: ignore
-            nft.updated_at = func.now()  # type: ignore
+            nft.last_fetched_at = func.now()
+            nft.updated_at = func.now()

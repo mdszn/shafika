@@ -27,9 +27,9 @@ class RedisQueueManager:
         if not result:
             return None, None
 
-        _, job_id = result  # pyright: ignore
+        _, job_id = result
         job_data = self.client.get(job_id)
-        return job_id, json.loads(job_data)  # pyright: ignore
+        return job_id, json.loads(job_data)
 
     def bl_pop_block(
         self, queue_name: str = "logs", timeout: int = 0
@@ -38,9 +38,9 @@ class RedisQueueManager:
         if not result:
             return None, None
 
-        _, job_id = result  # pyright: ignore
+        _, job_id = result
         job_data = self.client.get(job_id)
-        return job_id, json.loads(job_data)  # pyright: ignore
+        return job_id, json.loads(job_data)
 
     def delete_job(self, job_id: str):
         """Delete job data after processing."""

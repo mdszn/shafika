@@ -125,11 +125,11 @@ class BlockProcessor:
                 )
 
             block = self._fetch_block_with_retry(block_number)
-            block_ts = datetime.fromtimestamp(block["timestamp"])  # pyright: ignore - always present
-            tx_count = len(block["transactions"])  # pyright: ignore - always present
+            block_ts = datetime.fromtimestamp(block["timestamp"])
+            tx_count = len(block["transactions"])
             print(f"  Processing {tx_count} txs from block {block_number}")
 
-            for tx in block["transactions"]:  # pyright: ignore - always present
+            for tx in block["transactions"]:
                 tx_data = cast(TxData, tx)
 
                 # Use a savepoint for each transaction so one failure doesn't abort the whole block
@@ -144,15 +144,15 @@ class BlockProcessor:
                     )
                     session.add(tx_model)
 
-                    if tx_model.from_address:  # type: ignore
+                    if tx_model.from_address:
                         self._update_address_stats(
                             session,
-                            tx_model.from_address,  # type: ignore
+                            tx_model.from_address,
                             block_number,
-                            eth_sent=tx_model.value,  # type: ignore
+                            eth_sent=tx_model.value,
                         )
 
-                    if tx_model.to_address:  # type: ignore
+                    if tx_model.to_address:
                         # Check if receiver is a contract
                         is_contract = (
                             session.query(Contract)
@@ -163,9 +163,9 @@ class BlockProcessor:
 
                         self._update_address_stats(
                             session,
-                            tx_model.to_address,  # type: ignore
+                            tx_model.to_address,
                             block_number,
-                            eth_received=tx_model.value,  # type: ignore
+                            eth_received=tx_model.value,
                             is_contract=is_contract,
                         )
 
@@ -175,7 +175,7 @@ class BlockProcessor:
                     print(f"  Error parsing tx {tx_data.get('hash', 'unknown')}: {e}")
 
             if block_record:
-                block_record.worker_status = WorkerStatus.DONE  # pyright: ignore
+                block_record.worker_status = WorkerStatus.DONE
 
             session.commit()
             print(f"  Block {block_number} completed ({tx_count} txs)")
@@ -192,13 +192,13 @@ class BlockProcessor:
 
         eth_price = self.token.get_eth_price(self.queue.client)
 
-        tx_value = int(tx["value"])  # pyright: ignore - always present in full tx
+        tx_value = int(tx["value"])
         wei = self.web3.from_wei(tx_value, "ether")
 
         value_usd = float(wei) * eth_price if eth_price else None
 
         return Transaction(
-            tx_hash=tx["hash"].hex(),  # pyright: ignore - always present in full tx
+            tx_hash=tx["hash"].hex(),
             block_number=block_number,
             block_hash=block_hash,
             block_timestamp=block_ts,
@@ -218,7 +218,7 @@ class BlockProcessor:
         """Check if transaction is a contract creation and store it."""
         # Contract creation: transaction with no 'to' address
         if tx.get("to") is None:
-            tx_hash = tx["hash"]  # pyright: ignore
+            tx_hash = tx["hash"]
 
             try:
                 receipt = self.web3.eth.get_transaction_receipt(tx_hash)
@@ -300,7 +300,7 @@ class BlockProcessor:
         """Mark block as error in DB."""
         try:
             if block_record:
-                block_record.worker_status = WorkerStatus.ERROR  # pyright: ignore
+                block_record.worker_status = WorkerStatus.ERROR
                 session.commit()
         except Exception:
             pass
