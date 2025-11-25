@@ -145,19 +145,14 @@ class NftMetadata(Base):
     __tablename__ = "nft_metadata"
     token_address = Column(String(42), primary_key=True)
     token_id = Column(Numeric(78, 0), primary_key=True)
-
-    # On-chain data
     token_uri = Column(Text, nullable=True)
     owner = Column(String(42), index=True)
-
-    # Off-chain metadata (fetched from token_uri)
     name = Column(Text, nullable=True)
     description = Column(Text, nullable=True)
     image_url = Column(Text, nullable=True)
     external_url = Column(Text, nullable=True)
     animation_url = Column(Text, nullable=True)
     attributes = Column(JSON, nullable=True)
-    
     metadata_fetched = Column(Boolean, default=False, index=True)
     metadata_fetch_failed = Column(Boolean, default=False)
     metadata_fetch_error = Column(Text, nullable=True)
