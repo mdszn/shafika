@@ -6,12 +6,10 @@ import os
 from typing import cast
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-from sqlalchemy import desc
 from web3 import Web3
 from web3.types import FilterParams
 from dotenv import load_dotenv
 from common.failedjob import FailedJobManager
-from db.models.models import Transfer
 from common.queue import RedisQueueManager
 from db.models.models import JobType, BlockJob, LogJob
 
@@ -126,9 +124,7 @@ def backfill():
         total_logs = 0
         current_block = start
         current_batch_size = batch_size
-        block_timestamp_cache = (
-            {}
-        )
+        block_timestamp_cache = {}
 
         while current_block <= end:
             batch_end = min(current_block + current_batch_size - 1, end)
@@ -254,4 +250,3 @@ def backfill():
 
     except Exception as e:
         return jsonify({"error": "Failed to backfill", "details": str(e)}), 500
-

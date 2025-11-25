@@ -11,6 +11,7 @@ from sqlalchemy import (
     Float,
     SmallInteger,
     Integer,
+    Index,
 )
 from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy.types import Enum as SQLEnum
@@ -177,6 +178,41 @@ class AddressStats(Base):
     is_contract = Column(Boolean, default=False)
     updated_at = Column(
         TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class Swap(Base):
+    """DEX Swap transactions (Uniswap V2/V3, SushiSwap, etc.)"""
+    __tablename__ = "swaps"
+    transaction_hash = Column(String(66), primary_key=True)
+    log_index = Column(Integer, primary_key=True)
+    block_number = Column(BigInteger, nullable=False, index=True)
+    block_timestamp = Column(TIMESTAMP(timezone=True), nullable=False, index=True)
+    transaction_index = Column(Integer)
+    dex_name = Column(String(50), index=True)
+    pool_address = Column(String(42), nullable=False, index=True)
+    token0_address = Column(String(42), nullable=False, index=True)
+    token1_address = Column(String(42), nullable=False, index=True)
+    amount0_in = Column(String(78))
+    amount1_in = Column(String(78))
+    amount0_out = Column(String(78))
+    amount1_out = Column(String(78))
+    sender = Column(String(42), index=True)
+    recipient = Column(String(42), index=True)
+    amount0_usd = Column(Float)
+    amount1_usd = Column(Float)
+    price = Column(Float)
+    sqrt_price_x96 = Column(String(78))
+    liquidity = Column(String(78))
+    tick = Column(Integer)
+
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        Index("idx_swaps_pool_time", "pool_address", "block_timestamp"),
+        Index("idx_swaps_token0_time", "token0_address", "block_timestamp"),
+        Index("idx_swaps_token1_time", "token1_address", "block_timestamp"),
+        Index("idx_swaps_sender_time", "sender", "block_timestamp"),
     )
 
 
