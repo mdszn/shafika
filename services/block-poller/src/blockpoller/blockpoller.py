@@ -10,7 +10,7 @@ from db.models.models import JobType, BlockJob
 class BlockPoller:
     http_url: str
     ws_url: str
-    queue: RedisQueueManager
+    redis_client: RedisQueueManager
     queue_name: str
 
     def __init__(self, queue_name: str = "blocks"):
@@ -25,7 +25,7 @@ class BlockPoller:
 
         self.ws_url = ws_url
         self.http_url = http_url
-        self.queue = RedisQueueManager()
+        self.redis_client = RedisQueueManager()
         self.queue_name = queue_name
 
     async def stream_new_block(self):
@@ -64,7 +64,7 @@ class BlockPoller:
                                     "block_hash": block_hash,
                                     "status": "new",
                                 }
-                                self.queue.push_json(self.queue_name, job_id, job_data)
+                                self.redis_client.push_json(self.queue_name, job_id, job_data)
                             yield header
             except Exception as e:
                 print(f"ERROR: {type(e).__name__}: {e}")

@@ -25,7 +25,7 @@ from sqlalchemy.dialects.postgresql import insert
 
 class BlockProcessor:
     web3: Web3
-    queue: RedisQueueManager
+    redis_client: RedisQueueManager
     queue_name: str
     failed_job: FailedJobManager
 
@@ -33,7 +33,7 @@ class BlockProcessor:
         load_dotenv()
         http_url = os.getenv("ETH_HTTP_URL")
         self.web3 = Web3(Web3.HTTPProvider(http_url))
-        self.queue = RedisQueueManager()
+        self.redis_client = RedisQueueManager()
         self.queue_name = queue_name
         self.failed_job = FailedJobManager(queue_name, JobType.BLOCK)
         self.token = TokenMetadata(self.web3)
@@ -41,7 +41,7 @@ class BlockProcessor:
     def run(self):
         print(f"Worker listening on queue '{self.queue_name}'...")
         while True:
-            job_id, job = self.queue.bl_pop_block(self.queue_name)
+            job_id, job = self.redis_client.bl_pop_block(self.queue_name)
 
             if not job:
                 if job_id:
@@ -63,11 +63,11 @@ class BlockProcessor:
 
             try:
                 self.process_block(block_number, block_hash, block_status)
-                self.queue.delete_job(job_id)
+                self.redis_client.delete_job(job_id)
 
                 # If this was a retry, remove from failed_jobs table
                 if is_retry:
-                    if self.failed_job.remove_failed_block_record(job_id):
+                    if self.failed_job.remove_failed_job(job_id):
                         print(f"  Removed {job_id} from failed_jobs table")
                     else:
                         print(
@@ -76,7 +76,7 @@ class BlockProcessor:
             except Exception as e:
                 print(f"Error processing block {block_number}: {e}")
                 if self.failed_job.record(job_id, job, str(e)):
-                    self.queue.delete_job(job_id)
+                    self.redis_client.delete_job(job_id)
                 else:
                     print(
                         f"CRITICAL: Could not record failure for {job_id} - left in Redis"
@@ -190,7 +190,7 @@ class BlockProcessor:
     def _parse_transaction(self, tx: TxData, block_number, block_hash, block_ts):
         """Parse a single transaction."""
 
-        eth_price = self.token.get_eth_price(self.queue.client)
+        eth_price = self.token.get_eth_price(self.redis_client.client)
 
         tx_value = int(tx["value"])
         wei = self.web3.from_wei(tx_value, "ether")

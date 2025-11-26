@@ -4,6 +4,7 @@ from typing import Optional
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.orm import Session
 from web3 import Web3
 from dotenv import load_dotenv
 from common.queue import RedisQueueManager
@@ -36,7 +37,7 @@ APPROVAL_EVENT_SIGNATURE = (
 
 class LogProcessor:
     web3: Web3
-    queue: RedisQueueManager
+    redis_client: RedisQueueManager
     queue_name: str
     token_service: TokenMetadata
     failed_job: FailedJobManager
@@ -45,7 +46,7 @@ class LogProcessor:
         load_dotenv()
         http_url = os.getenv("ETH_HTTP_URL")
         self.web3 = Web3(Web3.HTTPProvider(http_url))
-        self.queue = RedisQueueManager()
+        self.redis_client = RedisQueueManager()
         self.queue_name = queue_name
         self.token_service = TokenMetadata(self.web3)
         self.failed_job = FailedJobManager(queue_name, JobType.LOG)
@@ -54,7 +55,7 @@ class LogProcessor:
         """Main loop: pull jobs from Redis and process them"""
         print(f"Worker listening on queue '{self.queue_name}'...")
         while True:
-            job_id, job = self.queue.bl_pop_log(self.queue_name)
+            job_id, job = self.redis_client.bl_pop_log(self.queue_name)
 
             if not job:
                 if job_id:
@@ -64,17 +65,24 @@ class LogProcessor:
             if not isinstance(job_id, str):
                 continue
 
+            log_status = job.get("status")
+            is_retry = log_status == "retrying"
+
             try:
                 self.process_log(job)
-                self.queue.delete_job(job_id)
+                self.redis_client.delete_job(job_id)
+
+                if is_retry:
+                    if self.failed_job.remove_failed_job(job_id):
+                        print(f"Removed {job_id} from failed_jobs table")
+                    else:
+                        print(f"Warning: Could not remove {job_id} from failed_jobs table")
             except Exception as e:
                 print(f"Erro processing log for Job")
                 if self.failed_job.record(job_id, job, str(e)):
-                    self.queue.delete_job(job_id)
+                    self.redis_client.delete_job(job_id)
                 else:
-                    print(
-                        f"CRITICAL: Could not record failure for {job_id} - left in Redis"
-                    )
+                    print(f"CRITICAL: Could not record failure for {job_id} - left in Redis")
 
     def process_log(self, job: LogJob):
         """Process a single log event - dispatches to appropriate handler"""
@@ -363,22 +371,20 @@ class LogProcessor:
             from_address = kwargs.get("from_address")
             to_address = kwargs.get("to_address")
             block_number = kwargs.get("block_number")
+            zero_addr = "0x0000000000000000000000000000000000000000"
 
-            # Exclude burn/mint addresses
-            if (
-                from_address
-                and from_address != "0x0000000000000000000000000000000000000000"
-            ):
-                self._update_token_transfer_stats(
-                    session, from_address, block_number, sent=True
-                )
+            updates = []
+            if from_address and from_address != zero_addr:
+                updates.append({"addr": from_address, "sent": True})
 
-            if (
-                to_address
-                and to_address != "0x0000000000000000000000000000000000000000"
-            ):
+            if to_address and to_address != zero_addr:
+                updates.append({"addr": to_address, "sent": False})
+
+            updates.sort(key=lambda x: x["addr"])
+
+            for update in updates:
                 self._update_token_transfer_stats(
-                    session, to_address, block_number, sent=False
+                    session, update["addr"], block_number, sent=update["sent"]
                 )
 
             session.commit()
@@ -415,7 +421,7 @@ class LogProcessor:
             session.close()
 
     def _update_token_transfer_stats(
-        self, session, address: str, block_number: int, sent: bool
+        self, session: Session, address: str, block_number: int, sent: bool
     ):
         """Update token transfer counts for address using upsert to avoid deadlocks"""
         address_lower = address.lower()
@@ -536,7 +542,6 @@ class LogProcessor:
             print(f"  Error creating NFT metadata: {e}")
         finally:
             session.close()
-
 
     def _process_uniswap_v2_swap(self, job: LogJob, topics: list[str]):
         """Process Uniswap V2 / SushiSwap Swap event"""

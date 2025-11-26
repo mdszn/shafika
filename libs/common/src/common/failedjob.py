@@ -3,7 +3,6 @@ from db.models.models import FailedJob, LogJob, BlockJob, JobType, WorkerStatus
 from sqlalchemy import select
 from common.queue import RedisQueueManager
 from datetime import datetime
-from typing import cast
 
 
 class FailedJobManager:
@@ -41,26 +40,26 @@ class FailedJobManager:
         finally:
             session.close()
 
-    def redrive_failed_blocks(self):
+    def redrive_failed_jobs(self):
         session = SessionLocal()
 
         try:
             failed_jobs = session.scalars(
                 select(FailedJob).where(
                     (FailedJob.status == WorkerStatus.ERROR)
-                    & (FailedJob.job_type == JobType.BLOCK)
+                    & (FailedJob.job_type == self.job_type)
                 )
             ).all()
 
             for job in failed_jobs:
-                job_data = cast(BlockJob, job.data)
+                job_data = job.data
                 job_data["status"] = "retrying"
-                self.redis_client.push_json("blocks", job.job_id, job_data)
+                self.redis_client.push_json(self.queue_name, job.job_id, job_data)
                 job.status = WorkerStatus.RETRYING
                 job.retries += 1
                 job.last_retry_at = datetime.now()
 
-            print(f"Push {len(failed_jobs)} jobs to 'blocks' queue for retry.")
+            print(f"Push {len(failed_jobs)} jobs to {self.queue_name} queue for retry.")
             session.commit()
             return True
 
@@ -71,7 +70,7 @@ class FailedJobManager:
         finally:
             session.close()
 
-    def remove_failed_block_record(self, job_id: str):
+    def remove_failed_job(self, job_id: str):
         """Remove a successfully reprocessed job from the failed_jobs table."""
         session = SessionLocal()
 

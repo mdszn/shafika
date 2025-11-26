@@ -36,7 +36,7 @@ def health():
 def redrive_failed_jobs():
     try:
         failed_blocks = FailedJobManager("blocks", JobType.BLOCK)
-        success = failed_blocks.redrive_failed_blocks()
+        success = failed_blocks.redrive_failed_jobs()
 
         if success:
             return jsonify({"status": "starting redrive on failed blocks"}), 200
@@ -44,6 +44,19 @@ def redrive_failed_jobs():
             return jsonify({"status": "internal server error"}), 500
     except Exception as e:
         return jsonify({"error": "Failed to redrive blocks", "details": str(e)}), 500
+    
+@app.route("/api/redrive-logs", methods=["POST"])
+def redrive_failed_logs():
+    try:
+        failed_logs = FailedJobManager("logs", JobType.LOG)
+        success = failed_logs.redrive_failed_jobs()
+
+        if success:
+            return jsonify({"status": "starting redrive on failed logs"}), 200
+        else:
+            return jsonify({"status": "internal server error"}), 500
+    except Exception as e:
+        return jsonify({"error": "Failed to redrive logs", "details": str(e)}), 500
 
 
 @app.route("/api/backfill", methods=["POST"])

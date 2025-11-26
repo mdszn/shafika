@@ -73,6 +73,7 @@ class LogPoller:
 
                                 job: LogJob = {
                                     "job_type": JobType.LOG.value,
+                                    "status": "new",
                                     "address": address,
                                     "block_number": block_number,
                                     "block_hash": block_hash,

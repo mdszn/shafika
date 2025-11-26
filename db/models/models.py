@@ -51,6 +51,7 @@ class LogJob(TypedDict, total=True):
     topics: list[str]
     transaction_hash: str
     transaction_index: int
+    status: str
 
 
 class Block(Base):
