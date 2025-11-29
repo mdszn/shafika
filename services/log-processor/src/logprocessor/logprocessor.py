@@ -10,14 +10,17 @@ from dotenv import load_dotenv
 from common.queue import RedisQueueManager
 from common.db import SessionLocal
 from common.token import TokenMetadata
-from common.dex import UNISWAP_V2_SWAP_SIGNATURE, UNISWAP_V3_SWAP_SIGNATURE
+from common.dex import (
+    UNISWAP_V2_SWAP_SIGNATURE,
+    UNISWAP_V3_SWAP_SIGNATURE,
+    DexProcessor,
+)
+from common.nft import NftMetadataFetcher
 from db.models.models import (
     LogJob,
     Transfer,
     Approval,
     AddressStats,
-    NftMetadata,
-    Swap,
     JobType,
 )
 from eth_abi.abi import decode
@@ -41,6 +44,8 @@ class LogProcessor:
     queue_name: str
     token_service: TokenMetadata
     failed_job: FailedJobManager
+    dex_processor: DexProcessor
+    nft_fetcher: NftMetadataFetcher
 
     def __init__(self, queue_name: str = "logs"):
         load_dotenv()
@@ -50,6 +55,8 @@ class LogProcessor:
         self.queue_name = queue_name
         self.token_service = TokenMetadata(self.web3)
         self.failed_job = FailedJobManager(queue_name, JobType.LOG)
+        self.dex_processor = DexProcessor(self.web3)
+        self.nft_fetcher = NftMetadataFetcher(self.web3)
 
     def run(self):
         """Main loop: pull jobs from Redis and process them"""
@@ -76,13 +83,17 @@ class LogProcessor:
                     if self.failed_job.remove_failed_job(job_id):
                         print(f"Removed {job_id} from failed_jobs table")
                     else:
-                        print(f"Warning: Could not remove {job_id} from failed_jobs table")
+                        print(
+                            f"Warning: Could not remove {job_id} from failed_jobs table"
+                        )
             except Exception as e:
                 print(f"Erro processing log for Job")
                 if self.failed_job.record(job_id, job, str(e)):
                     self.redis_client.delete_job(job_id)
                 else:
-                    print(f"CRITICAL: Could not record failure for {job_id} - left in Redis")
+                    print(
+                        f"CRITICAL: Could not record failure for {job_id} - left in Redis"
+                    )
 
     def process_log(self, job: LogJob):
         """Process a single log event - dispatches to appropriate handler"""
@@ -102,9 +113,9 @@ class LogProcessor:
         elif event_signature == ERC1155_TRANSFER_BATCH:
             self._process_erc1155_batch(job, topics)
         elif event_signature == UNISWAP_V2_SWAP_SIGNATURE:
-            self._process_uniswap_v2_swap(job, topics)
+            self.dex_processor.process_uniswap_v2_swap(job, topics)
         elif event_signature == UNISWAP_V3_SWAP_SIGNATURE:
-            self._process_uniswap_v3_swap(job, topics)
+            self.dex_processor.process_uniswap_v3_swap(job, topics)
 
     def _process_approval_event(self, job: LogJob, topics: list[str]):
         """Process ERC20 Approval event"""
@@ -214,7 +225,7 @@ class LogProcessor:
 
         # Create NFT metadata record for ERC721
         if token_type == "erc721" and token_id is not None and to_address:
-            self._create_nft_metadata(
+            self.nft_fetcher.create_nft_metadata(
                 token_address=token_address.lower(),
                 token_id=token_id,
                 owner=to_address.lower(),
@@ -271,7 +282,7 @@ class LogProcessor:
 
         # Create NFT metadata record for ERC1155
         if to_address:
-            self._create_nft_metadata(
+            self.nft_fetcher.create_nft_metadata(
                 token_address=token_address.lower(),
                 token_id=token_id,
                 owner=to_address.lower(),
@@ -345,7 +356,7 @@ class LogProcessor:
 
                 # Create NFT metadata record for each token in batch
                 if to_address:
-                    self._create_nft_metadata(
+                    self.nft_fetcher.create_nft_metadata(
                         token_address=token_address.lower(),
                         token_id=token_id,
                         owner=to_address.lower(),
@@ -496,233 +507,3 @@ class LogProcessor:
         if isinstance(value, str):
             return int(value, 16)
         return None
-
-    def _create_nft_metadata(
-        self,
-        token_address: str,
-        token_id: int,
-        owner: str,
-        block_number: int,
-        tx_hash: str,
-    ):
-        """Create or update NFT metadata record"""
-        session = SessionLocal()
-        try:
-            # Check if NFT already exists
-            existing = (
-                session.query(NftMetadata)
-                .filter(
-                    NftMetadata.token_address == token_address,
-                    NftMetadata.token_id == token_id,
-                )
-                .first()
-            )
-
-            if existing:
-                # Update owner on transfer
-                existing.owner = owner
-                existing.updated_at = func.now()
-            else:
-                # Create new NFT metadata record
-                nft = NftMetadata(
-                    token_address=token_address,
-                    token_id=token_id,
-                    owner=owner,
-                    first_seen_block=block_number,
-                    first_seen_tx=tx_hash,
-                    metadata_fetched=False,  # Will be fetched by worker
-                )
-                session.add(nft)
-
-            session.commit()
-        except IntegrityError:
-            session.rollback()  # Duplicate, ignore
-        except Exception as e:
-            session.rollback()
-            print(f"  Error creating NFT metadata: {e}")
-        finally:
-            session.close()
-
-    def _process_uniswap_v2_swap(self, job: LogJob, topics: list[str]):
-        """Process Uniswap V2 / SushiSwap Swap event"""
-        if len(topics) < 3:
-            return
-
-        pool_address = job.get("address", "")
-        sender = "0x" + topics[1][-40:]
-        recipient = "0x" + topics[2][-40:]
-
-        data = job.get("data", "0x")
-        if not data or data == "0x":
-            return
-
-        try:
-            data_bytes = bytes.fromhex(data[2:])
-
-            amount0_in = int.from_bytes(data_bytes[0:32], "big")
-            amount1_in = int.from_bytes(data_bytes[32:64], "big")
-            amount0_out = int.from_bytes(data_bytes[64:96], "big")
-            amount1_out = int.from_bytes(data_bytes[96:128], "big")
-
-            print(
-                f"Processing V2 Swap: Pool {pool_address[:10]}... - {amount0_in or amount0_out}/{amount1_in or amount1_out}"
-            )
-
-            token0, token1 = self._get_pool_tokens(pool_address)
-
-            if not token0 or not token1:
-                print(f"  Warning: Could not fetch pool tokens for {pool_address}")
-                return
-
-            session = SessionLocal()
-            try:
-                swap = Swap(
-                    transaction_hash=job.get("transaction_hash"),
-                    log_index=job.get("log_index"),
-                    block_number=job.get("block_number"),
-                    block_timestamp=self._parse_timestamp(job.get("block_timestamp")),
-                    transaction_index=job.get("transaction_index"),
-                    dex_name="uniswap_v2",
-                    pool_address=pool_address.lower(),
-                    token0_address=token0.lower(),
-                    token1_address=token1.lower(),
-                    amount0_in=str(amount0_in),
-                    amount1_in=str(amount1_in),
-                    amount0_out=str(amount0_out),
-                    amount1_out=str(amount1_out),
-                    sender=sender.lower(),
-                    recipient=recipient.lower(),
-                )
-
-                session.add(swap)
-                session.commit()
-                print(f"  ✓ Indexed V2 swap")
-
-            except IntegrityError:
-                session.rollback()
-            except Exception as e:
-                session.rollback()
-                print(f"  Error processing V2 swap: {e}")
-            finally:
-                session.close()
-
-        except Exception as e:
-            print(f"  Error decoding V2 swap data: {e}")
-
-    def _process_uniswap_v3_swap(self, job: LogJob, topics: list[str]):
-        """Process Uniswap V3 Swap event"""
-        if len(topics) < 3:
-            return
-
-        pool_address = job.get("address", "")
-        sender = "0x" + topics[1][-40:]
-        recipient = "0x" + topics[2][-40:]
-
-        data = job.get("data", "0x")
-        if not data or data == "0x":
-            return
-
-        try:
-            data_bytes = bytes.fromhex(data[2:])
-
-            amount0 = int.from_bytes(data_bytes[0:32], "big", signed=True)
-            amount1 = int.from_bytes(data_bytes[32:64], "big", signed=True)
-            sqrt_price_x96 = int.from_bytes(data_bytes[64:96], "big")
-            liquidity = int.from_bytes(data_bytes[96:128], "big")
-            tick = int.from_bytes(data_bytes[128:160], "big", signed=True)
-
-            amount0_in = str(abs(amount0)) if amount0 < 0 else "0"
-            amount0_out = str(amount0) if amount0 > 0 else "0"
-            amount1_in = str(abs(amount1)) if amount1 < 0 else "0"
-            amount1_out = str(amount1) if amount1 > 0 else "0"
-
-            print(
-                f"Processing V3 Swap: Pool {pool_address[:10]}... - {amount0_in or amount0_out}/{amount1_in or amount1_out}"
-            )
-
-            token0, token1 = self._get_pool_tokens(pool_address)
-
-            if not token0 or not token1:
-                print(f"  Warning: Could not fetch pool tokens for {pool_address}")
-                return
-
-            session = SessionLocal()
-            try:
-                swap = Swap(
-                    transaction_hash=job.get("transaction_hash"),
-                    log_index=job.get("log_index"),
-                    block_number=job.get("block_number"),
-                    block_timestamp=self._parse_timestamp(job.get("block_timestamp")),
-                    transaction_index=job.get("transaction_index"),
-                    dex_name="uniswap_v3",
-                    pool_address=pool_address.lower(),
-                    token0_address=token0.lower(),
-                    token1_address=token1.lower(),
-                    amount0_in=amount0_in,
-                    amount1_in=amount1_in,
-                    amount0_out=amount0_out,
-                    amount1_out=amount1_out,
-                    sender=sender.lower(),
-                    recipient=recipient.lower(),
-                    sqrt_price_x96=str(sqrt_price_x96),
-                    liquidity=str(liquidity),
-                    tick=tick,
-                )
-
-                session.add(swap)
-                session.commit()
-                print(f"  ✓ Indexed V3 swap")
-
-            except IntegrityError:
-                session.rollback()
-            except Exception as e:
-                session.rollback()
-                print(f"  Error processing V3 swap: {e}")
-            finally:
-                session.close()
-
-        except Exception as e:
-            print(f"  Error decoding V3 swap data: {e}")
-
-    def _get_pool_tokens(self, pool_address: str) -> tuple[str, str]:
-        """
-        Get token0 and token1 addresses from a Uniswap pool.
-        Results are cached to avoid repeated RPC calls.
-        """
-        if not hasattr(self, "_pool_token_cache"):
-            self._pool_token_cache = {}
-
-        pool_lower = pool_address.lower()
-        if pool_lower in self._pool_token_cache:
-            return self._pool_token_cache[pool_lower]
-
-        pool_abi = [
-            {
-                "constant": True,
-                "inputs": [],
-                "name": "token0",
-                "outputs": [{"name": "", "type": "address"}],
-                "type": "function",
-            },
-            {
-                "constant": True,
-                "inputs": [],
-                "name": "token1",
-                "outputs": [{"name": "", "type": "address"}],
-                "type": "function",
-            },
-        ]
-
-        try:
-            pool_contract = self.web3.eth.contract(
-                address=Web3.to_checksum_address(pool_address), abi=pool_abi
-            )
-            token0 = pool_contract.functions.token0().call()
-            token1 = pool_contract.functions.token1().call()
-
-            self._pool_token_cache[pool_lower] = (token0, token1)
-
-            return (token0, token1)
-        except Exception as e:
-            print(f"  Warning: Could not fetch pool tokens for {pool_address}: {e}")
-            return ("", "")

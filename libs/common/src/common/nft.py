@@ -3,6 +3,10 @@ import base64
 import json
 from typing import Optional, Dict
 from web3 import Web3
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy import func
+from common.db import SessionLocal
+from db.models.models import NftMetadata
 
 
 class NftMetadataFetcher:
@@ -146,3 +150,49 @@ class NftMetadataFetcher:
             return f"{self.IPFS_GATEWAYS[0]}{ipfs_hash}"
 
         return image_url
+
+    def create_nft_metadata(
+        self,
+        token_address: str,
+        token_id: int,
+        owner: str,
+        block_number: int,
+        tx_hash: str,
+    ):
+        """Create or update NFT metadata record"""
+        session = SessionLocal()
+        try:
+            # Check if NFT already exists
+            existing = (
+                session.query(NftMetadata)
+                .filter(
+                    NftMetadata.token_address == token_address,
+                    NftMetadata.token_id == token_id,
+                )
+                .first()
+            )
+
+            if existing:
+                # Update owner on transfer
+                existing.owner = owner
+                existing.updated_at = func.now()
+            else:
+                # Create new NFT metadata record
+                nft = NftMetadata(
+                    token_address=token_address,
+                    token_id=token_id,
+                    owner=owner,
+                    first_seen_block=block_number,
+                    first_seen_tx=tx_hash,
+                    metadata_fetched=False,  # Will be fetched by worker
+                )
+                session.add(nft)
+
+            session.commit()
+        except IntegrityError:
+            session.rollback()  # Duplicate, ignore
+        except Exception as e:
+            session.rollback()
+            print(f"  Error creating NFT metadata: {e}")
+        finally:
+            session.close()
