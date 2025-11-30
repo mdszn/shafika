@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "block-processor"
 version = "0.1.0"
-description = "Block processor service"
+description = "Block processor service used by Shafika"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [

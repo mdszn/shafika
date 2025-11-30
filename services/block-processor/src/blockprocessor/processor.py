@@ -68,19 +68,15 @@ class BlockProcessor:
                 # If this was a retry, remove from failed_jobs table
                 if is_retry:
                     if self.failed_job.remove_failed_job(job_id):
-                        print(f"  Removed {job_id} from failed_jobs table")
+                        print(f"Removed {job_id} from failed_jobs table")
                     else:
-                        print(
-                            f"  Warning: Could not remove {job_id} from failed_jobs table"
-                        )
+                        print(f"Could not remove {job_id} from failed_jobs table")
             except Exception as e:
                 print(f"Error processing block {block_number}: {e}")
                 if self.failed_job.record(job_id, job, str(e)):
                     self.redis_client.delete_job(job_id)
                 else:
-                    print(
-                        f"CRITICAL: Could not record failure for {job_id} - left in Redis"
-                    )
+                    print(f"CRITICAL: Could not record failure for {job_id} - left in Redis")
 
     def _fetch_block_with_retry(self, block_number: int, max_retries: int = 5):
         """Fetch block from Web3 with exponential backoff for rate limiting."""
@@ -90,9 +86,7 @@ class BlockProcessor:
             except HTTPError as e:
                 if e.response.status_code == 429:
                     wait_time = (2**attempt) + (attempt * 0.5)  # Exponential backoff
-                    print(
-                        f"  Rate limited (429) on block {block_number}, retrying in {wait_time:.1f}s (attempt {attempt + 1}/{max_retries})"
-                    )
+                    print(f"Rate limited (429) on block {block_number}, retrying in {wait_time:.1f}s (attempt {attempt + 1}/{max_retries})")
                     time.sleep(wait_time)
                     if attempt == max_retries - 1:
                         raise
@@ -108,7 +102,6 @@ class BlockProcessor:
         block_record = None
 
         try:
-            # For new blocks, create the record
             if block_status == "new":
                 block_record = Block(
                     block_number=block_number,
@@ -127,21 +120,15 @@ class BlockProcessor:
             block = self._fetch_block_with_retry(block_number)
             block_ts = datetime.fromtimestamp(block["timestamp"])
             tx_count = len(block["transactions"])
-            print(f"  Processing {tx_count} txs from block {block_number}")
+            print(f"Processing {tx_count} txs from block {block_number}")
 
             for tx in block["transactions"]:
                 tx_data = cast(TxData, tx)
 
-                # Use a savepoint for each transaction so one failure doesn't abort the whole block
                 savepoint = session.begin_nested()
                 try:
-                    self._check_contract_creation(
-                        tx_data, block_number, block_ts, session
-                    )
-
-                    tx_model = self._parse_transaction(
-                        tx_data, block_number, block_hash, block_ts
-                    )
+                    self._check_contract_creation(tx_data, block_number, block_ts, session)
+                    tx_model = self._parse_transaction(tx_data, block_number, block_hash, block_ts)
                     session.add(tx_model)
 
                     if tx_model.from_address:
@@ -169,16 +156,16 @@ class BlockProcessor:
                             is_contract=is_contract,
                         )
 
-                    savepoint.commit()  # Commit the savepoint
+                    savepoint.commit()
                 except Exception as e:
-                    savepoint.rollback()  # Rollback just this transaction
-                    print(f"  Error parsing tx {tx_data.get('hash', 'unknown')}: {e}")
+                    savepoint.rollback()
+                    print(f"Error parsing tx {tx_data.get('hash', 'unknown')}: {e}")
 
             if block_record:
                 block_record.worker_status = WorkerStatus.DONE
 
             session.commit()
-            print(f"  Block {block_number} completed ({tx_count} txs)")
+            print(f"Block {block_number} completed ({tx_count} txs)")
 
         except Exception as e:
             session.rollback()
@@ -192,7 +179,7 @@ class BlockProcessor:
 
         eth_price = self.token.get_eth_price(self.redis_client.client)
 
-        tx_value = int(tx["value"])
+        tx_value = int(tx.get("value", 0))
         wei = self.web3.from_wei(tx_value, "ether")
 
         value_usd = float(wei) * eth_price if eth_price else None
@@ -212,9 +199,7 @@ class BlockProcessor:
             status=1,
         )
 
-    def _check_contract_creation(
-        self, tx: TxData, block_number, block_ts, session: Session
-    ):
+    def _check_contract_creation(self, tx: TxData, block_number, block_ts, session: Session):
         """Check if transaction is a contract creation and store it."""
         # Contract creation: transaction with no 'to' address
         if tx.get("to") is None:
@@ -244,11 +229,9 @@ class BlockProcessor:
                     # Update deployer's contract deployment count
                     deployer = tx.get("from")
                     if deployer:
-                        self._update_address_stats(
-                            session, deployer, block_number, contract_deployment=True
-                        )
+                        self._update_address_stats(session, deployer, block_number, contract_deployment=True)
             except Exception as e:
-                print(f"  Error processing contract creation {tx_hash}: {e}")
+                print(f"Error processing contract creation {tx_hash}: {e}")
 
     def _update_address_stats(
         self,

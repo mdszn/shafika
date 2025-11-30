@@ -3,7 +3,6 @@ from .blockpoller import BlockPoller
 
 
 def main() -> None:
-
     try:
         poller = BlockPoller()
         print(f"Redis connected")

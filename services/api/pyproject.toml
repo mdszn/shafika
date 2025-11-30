@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "api"
 version = "0.1.0"
-description = "REST API service for Ethereum indexer"
+description = "REST API service for Shafika Ethereum indexer"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [

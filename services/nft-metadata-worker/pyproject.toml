@@ -1,7 +1,7 @@
 [project]
 name = "nft-metadata-worker"
 version = "0.1.0"
-description = "NFT metadata fetcher worker"
+description = "NFT metadata fetcher worker for Shafika"
 requires-python = ">=3.11"
 dependencies = [
     "common",

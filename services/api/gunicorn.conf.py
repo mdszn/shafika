@@ -37,10 +37,6 @@ user = None
 group = None
 tmp_upload_dir = None
 
-# SSL (uncomment if using HTTPS)
-# keyfile = "/path/to/key.pem"
-# certfile = "/path/to/cert.pem"
-
 # Reload on code changes (DEVELOPMENT ONLY - disable in production)
 reload = os.getenv("FLASK_ENV") == "development"
 

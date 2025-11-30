@@ -1,7 +1,3 @@
-"""
-Main entry point for the Ethereum Indexer API.
-"""
-
 import os
 from .server import app
 

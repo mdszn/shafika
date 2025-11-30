@@ -20,15 +20,11 @@ class TokenMetadata:
         self.web3 = web3
         self._etherscan_api_key = _etherscan_api_key
 
-    def get_metadata(
-        self, token_address: str, token_type: str = "erc20"
-    ) -> tuple[Optional[str], Optional[int]]:
+    def get_metadata(self, token_address: str, token_type: str = "erc20"):
         """
         Get token symbol and decimals with 2-tier caching:
         1. Database cache (fast - uses PRIMARY KEY index)
         2. Blockchain call (slow - only if not in DB)
-
-        Returns: (symbol, decimals)
         """
         token_address_lower = token_address.lower()
         session = SessionLocal()
@@ -49,7 +45,7 @@ class TokenMetadata:
 
         return self._fetch_from_blockchain(token_address_lower, token_type)
 
-    def get_eth_price(self, redis_client: redis.Redis, ttl: int = 5) -> Optional[float]:
+    def get_eth_price(self, redis_client: redis.Redis, ttl: int = 5):
         """Fetch ETH/USD Price"""
 
         if redis_client:
@@ -91,9 +87,7 @@ class TokenMetadata:
             print(f"Error fetching ETH Price: {e}")
             return None
 
-    def _fetch_from_blockchain(
-        self, token_address: str, token_type: str
-    ) -> tuple[Optional[str], Optional[int]]:
+    def _fetch_from_blockchain(self, token_address: str, token_type: str):
         """Fetch token metadata from blockchain via contract calls"""
         try:
             checksum_address = self.web3.to_checksum_address(token_address)
@@ -106,14 +100,12 @@ class TokenMetadata:
             decimals = self._fetch_decimals(contract, token_type)
 
             result = (symbol, decimals)
-            self._save_to_db(
-                token_address, token_type, symbol, name, decimals, failed=False
-            )
+            self._save_to_db(token_address, token_type, symbol, name, decimals, failed=False)
 
             return result
 
         except Exception as e:
-            print(f"  Warning: Could not fetch metadata for {token_address}: {e}")
+            print(f"Could not fetch metadata for {token_address}: {e}")
 
             self._save_to_db(token_address, token_type, None, None, None, failed=True)
             return (None, None)
@@ -147,7 +139,7 @@ class TokenMetadata:
                     "type": "function",
                 }
             ]
-        else:  # ERC20
+        else: # ERC20
             return [
                 {
                     "constant": True,
@@ -172,21 +164,21 @@ class TokenMetadata:
                 },
             ]
 
-    def _fetch_symbol(self, contract) -> Optional[str]:
+    def _fetch_symbol(self, contract):
         """Fetch symbol from contract"""
         try:
             return contract.functions.symbol().call()
         except Exception:
             return None
 
-    def _fetch_name(self, contract) -> Optional[str]:
+    def _fetch_name(self, contract):
         """Fetch name from contract"""
         try:
             return contract.functions.name().call()
         except Exception:
             return None
 
-    def _fetch_decimals(self, contract, token_type: str) -> Optional[int]:
+    def _fetch_decimals(self, contract, token_type: str):
         """Fetch decimals from contract (only for ERC20)"""
         if token_type != "erc20":
             return None
@@ -220,6 +212,6 @@ class TokenMetadata:
             session.commit()
         except Exception as e:
             session.rollback()
-            print(f"  Warning: Could not save token to DB: {e}")
+            print(f"Warning: Could not save token to DB: {e}")
         finally:
             session.close()

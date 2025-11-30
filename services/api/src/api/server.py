@@ -1,7 +1,3 @@
-"""
-REST API Server for Ethereum Indexer
-"""
-
 import os
 from typing import cast
 from flask import Flask, jsonify, request
@@ -117,7 +113,6 @@ def backfill():
         return jsonify({"error": "batch_size must be an integer"}), 400
 
     try:
-        # Step 1: Queue blocks
         blocks_queued = 0
         for i in range(start, end + 1):
             job_id = f"block:{i}"
@@ -133,7 +128,6 @@ def backfill():
         
         log_filter: dict = {}
 
-        
         total_logs = 0
         current_block = start
         current_batch_size = batch_size
@@ -161,9 +155,7 @@ def backfill():
                                 int(timestamp) if timestamp else 0
                             )
                         except Exception as e:
-                            print(
-                                f"  Warning: Could not fetch timestamp for block {block_number}: {e}"
-                            )
+                            print(f"Warning: Could not fetch timestamp for block {block_number}: {e}")
                             block_timestamp_cache[block_number] = 0
 
                     block_timestamp = block_timestamp_cache[block_number]

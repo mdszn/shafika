@@ -1,7 +1,6 @@
 import requests
 import base64
 import json
-from typing import Optional, Dict
 from web3 import Web3
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func
@@ -22,7 +21,7 @@ class NftMetadataFetcher:
     def __init__(self, web3: Web3):
         self.web3 = web3
 
-    def get_token_uri(self, contract_address: str, token_id: int) -> Optional[str]:
+    def get_token_uri(self, contract_address: str, token_id: int):
         """
         Fetch tokenURI from NFT contract (on-chain call)
         Supports both ERC721 and ERC1155
@@ -73,7 +72,7 @@ class NftMetadataFetcher:
                 )
                 return None
 
-    def fetch_metadata_from_uri(self, token_uri: str) -> Optional[Dict]:
+    def fetch_metadata_from_uri(self, token_uri: str):
         """Fetch JSON metadata from tokenURI"""
         if not token_uri:
             return None
@@ -100,7 +99,7 @@ class NftMetadataFetcher:
             print(f"Error fetching metadata from {token_uri}: {e}")
             return None
 
-    def _fetch_from_ipfs(self, ipfs_hash: str) -> Optional[Dict]:
+    def _fetch_from_ipfs(self, ipfs_hash: str):
         """Try multiple IPFS gateways"""
         for gateway in self.IPFS_GATEWAYS:
             try:
@@ -109,12 +108,12 @@ class NftMetadataFetcher:
                 response.raise_for_status()
                 return response.json()
             except Exception as e:
-                continue  # Try next gateway
+                continue # Go on and try next gateway
 
         print(f"Failed to fetch from all IPFS gateways for {ipfs_hash}")
         return None
 
-    def _fetch_from_http(self, url: str) -> Optional[Dict]:
+    def _fetch_from_http(self, url: str):
         """Fetch from HTTP(S) URL"""
         try:
             response = requests.get(url, timeout=10)
@@ -124,7 +123,7 @@ class NftMetadataFetcher:
             print(f"Error fetching from HTTP: {e}")
             return None
 
-    def _parse_data_uri(self, data_uri: str) -> Optional[Dict]:
+    def _parse_data_uri(self, data_uri: str):
         """Parse base64 encoded data URI"""
         try:
             # Format: data:application/json;base64,<data>
@@ -140,7 +139,7 @@ class NftMetadataFetcher:
             print(f"Error parsing data URI: {e}")
             return None
 
-    def normalize_image_url(self, image_url: str) -> str:
+    def normalize_image_url(self, image_url: str):
         """Convert IPFS image URLs to gateway URLs"""
         if not image_url:
             return image_url
@@ -173,26 +172,24 @@ class NftMetadataFetcher:
             )
 
             if existing:
-                # Update owner on transfer
                 existing.owner = owner
                 existing.updated_at = func.now()
             else:
-                # Create new NFT metadata record
                 nft = NftMetadata(
                     token_address=token_address,
                     token_id=token_id,
                     owner=owner,
                     first_seen_block=block_number,
                     first_seen_tx=tx_hash,
-                    metadata_fetched=False,  # Will be fetched by worker
+                    metadata_fetched=False,
                 )
                 session.add(nft)
 
             session.commit()
         except IntegrityError:
-            session.rollback()  # Duplicate, ignore
+            session.rollback()
         except Exception as e:
             session.rollback()
-            print(f"  Error creating NFT metadata: {e}")
+            print(f"Error creating NFT metadata: {e}")
         finally:
             session.close()

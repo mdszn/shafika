@@ -1,61 +1,24 @@
-"""
-DEX (Decentralized Exchange) utility functions and constants
-"""
-
 from datetime import datetime
 from typing import Optional
 from web3 import Web3
 from sqlalchemy.exc import IntegrityError
-
 from common.db import SessionLocal
 from db.models.models import LogJob, Swap
 
-# ==================== Event Signatures ====================
 
-# Uniswap V2 / SushiSwap Swap Event
-# event Swap(
-#     address indexed sender,
-#     uint amount0In,
-#     uint amount1In,
-#     uint amount0Out,
-#     uint amount1Out,
-#     address indexed to
-# )
 UNISWAP_V2_SWAP_SIGNATURE = (
     "0xd78ad95fa46c994b6551d0da85fc275fe613ce37657fb8d5e3d130840159d822"
 )
 
-# Uniswap V3 Swap Event
-# event Swap(
-#     address indexed sender,
-#     address indexed recipient,
-#     int256 amount0,
-#     int256 amount1,
-#     uint160 sqrtPriceX96,
-#     uint128 liquidity,
-#     int24 tick
-# )
+
 UNISWAP_V3_SWAP_SIGNATURE = (
     "0xc42079f94a6350d7e6235f29174924f928cc2ac818eb64fed8004e115fbcca67"
 )
 
-# ==================== Factory Addresses (Ethereum Mainnet) ====================
-
+# Factory Addresses on Ethereum Mainnet
 UNISWAP_V2_FACTORY = "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f"
 UNISWAP_V3_FACTORY = "0x1F98431c8aD98523631AE4a59f267346ea31F984"
 SUSHISWAP_FACTORY = "0xC0AEe478e3658e2610c5F7A4A2E1777cE9e4f2Ac"
-
-# ==================== Popular Pools (for reference) ====================
-
-# Uniswap V3 Pools
-WETH_USDC_V3_005 = "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640"  # 0.05% fee
-WETH_USDC_V3_030 = "0x8ad599c3a0ff1de082011efddc58f1908eb6e6d8"  # 0.3% fee
-WETH_USDT_V3_005 = "0x11b815efb8f581194ae79006d24e0d814b7697f6"  # 0.05% fee
-
-# Uniswap V2 Pools
-WETH_USDC_V2 = "0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc"
-WETH_USDT_V2 = "0x0d4a11d5eeaac28ec3f61d100daf4d40471f1852"
-WETH_DAI_V2 = "0xa478c2975ab1ea89e8196811f51a7b7ade33eb11"
 
 
 
@@ -100,12 +63,11 @@ class DexProcessor:
                 print(f"  Warning: Could not fetch pool tokens for {pool_address}")
                 return
 
-            # Determine DEX name (Uniswap V2 or SushiSwap)
             factory_address = self._get_pool_factory(pool_address)
             dex_name = self._get_dex_from_factory(factory_address)
 
             if dex_name == "unknown":
-                dex_name = "uniswap_v2"  # Default fallback
+                dex_name = "uniswap_v2"  # Default fallback for now. We should look to change this
 
             session = SessionLocal()
             try:
@@ -129,18 +91,18 @@ class DexProcessor:
 
                 session.add(swap)
                 session.commit()
-                print(f"  ✓ Indexed {dex_name} swap")
+                print(f"Indexed {dex_name} swap")
 
             except IntegrityError:
                 session.rollback()
             except Exception as e:
                 session.rollback()
-                print(f"  Error processing V2 swap: {e}")
+                print(f"Error processing V2 swap: {e}")
             finally:
                 session.close()
 
         except Exception as e:
-            print(f"  Error decoding V2 swap data: {e}")
+            print(f"Error decoding V2 swap data: {e}")
 
     def process_uniswap_v3_swap(self, job: LogJob, topics: list[str]):
         """Process Uniswap V3 Swap event"""
@@ -169,14 +131,12 @@ class DexProcessor:
             amount1_in = str(abs(amount1)) if amount1 < 0 else "0"
             amount1_out = str(amount1) if amount1 > 0 else "0"
 
-            print(
-                f"Processing V3 Swap: Pool {pool_address[:10]}... - {amount0_in or amount0_out}/{amount1_in or amount1_out}"
-            )
+            print(f"Processing V3 Swap: Pool {pool_address[:10]}... - {amount0_in or amount0_out}/{amount1_in or amount1_out}")
 
             token0, token1 = self._get_pool_tokens(pool_address)
 
             if not token0 or not token1:
-                print(f"  Warning: Could not fetch pool tokens for {pool_address}")
+                print(f"Warning: Could not fetch pool tokens for {pool_address}")
                 return
 
             session = SessionLocal()
@@ -204,18 +164,18 @@ class DexProcessor:
 
                 session.add(swap)
                 session.commit()
-                print(f"  ✓ Indexed V3 swap")
+                print(f"Indexed V3 swap")
 
             except IntegrityError:
                 session.rollback()
             except Exception as e:
                 session.rollback()
-                print(f"  Error processing V3 swap: {e}")
+                print(f"Error processing V3 swap: {e}")
             finally:
                 session.close()
 
         except Exception as e:
-            print(f"  Error decoding V3 swap data: {e}")
+            print(f"Error decoding V3 swap data: {e}")
 
     def _get_pool_tokens(self, pool_address: str) -> tuple[str, str]:
         """
@@ -254,7 +214,7 @@ class DexProcessor:
 
             return (token0, token1)
         except Exception as e:
-            print(f"  Warning: Could not fetch pool tokens for {pool_address}: {e}")
+            print(f"Could not fetch pool tokens for {pool_address}: {e}")
             return ("", "")
 
     def _get_pool_factory(self, pool_address: str) -> Optional[str]:
@@ -264,7 +224,6 @@ class DexProcessor:
         if pool_lower in self._pool_factory_cache:
             return self._pool_factory_cache[pool_lower]
 
-        # Common ABI for V2 and V3 pools 'factory' method
         factory_abi = [
             {
                 "inputs": [],
@@ -283,7 +242,7 @@ class DexProcessor:
             self._pool_factory_cache[pool_lower] = factory
             return factory
         except Exception as e:
-            print(f"  Warning: Could not fetch pool factory for {pool_address}: {e}")
+            print(f"Could not fetch pool factory for {pool_address}: {e}")
             return None
 
     def _parse_timestamp(self, timestamp) -> datetime:
@@ -301,7 +260,7 @@ class DexProcessor:
 
             return datetime.fromtimestamp(timestamp_int)
         except Exception as e:
-            print(f"  Warning: Could not parse timestamp {timestamp}: {e}")
+            print(f"Could not parse timestamp {timestamp}: {e}")
             return datetime.now()
 
     def _get_dex_from_factory(factory_address: str) -> str:

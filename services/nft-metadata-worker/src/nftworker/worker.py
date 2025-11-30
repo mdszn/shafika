@@ -40,13 +40,13 @@ class NftMetadataWorker:
                 )
 
                 if unfetched_nfts:
-                    print(f"\nProcessing {len(unfetched_nfts)} NFTs without metadata...")
+                    print(f"Processing {len(unfetched_nfts)} NFTs without metadata...")
 
                     for nft in unfetched_nfts:
                         self._fetch_and_update_metadata(nft, session)
 
                     session.commit()
-                    print(f"✅ Batch complete\n")
+                    print(f"Batch complete\n")
                 else:
                     
                     retry_nfts = (
@@ -65,7 +65,7 @@ class NftMetadataWorker:
                         for nft in retry_nfts:
                             self._fetch_and_update_metadata(nft, session)
                         session.commit()
-                        print(f"✅ Retry batch complete\n")
+                        print(f"Retry batch complete\n")
                     else:
                         print("No NFTs to process. Sleeping...")
 

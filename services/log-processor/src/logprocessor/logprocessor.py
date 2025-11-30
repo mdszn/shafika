@@ -59,7 +59,6 @@ class LogProcessor:
         self.nft_fetcher = NftMetadataFetcher(self.web3)
 
     def run(self):
-        """Main loop: pull jobs from Redis and process them"""
         print(f"Worker listening on queue '{self.queue_name}'...")
         while True:
             job_id, job = self.redis_client.bl_pop_log(self.queue_name)
@@ -83,17 +82,13 @@ class LogProcessor:
                     if self.failed_job.remove_failed_job(job_id):
                         print(f"Removed {job_id} from failed_jobs table")
                     else:
-                        print(
-                            f"Warning: Could not remove {job_id} from failed_jobs table"
-                        )
+                        print(f"Could not remove {job_id} from failed_jobs table")
             except Exception as e:
                 print(f"Erro processing log for Job")
                 if self.failed_job.record(job_id, job, str(e)):
                     self.redis_client.delete_job(job_id)
                 else:
-                    print(
-                        f"CRITICAL: Could not record failure for {job_id} - left in Redis"
-                    )
+                    print(f"Could not record failure for {job_id} - left in Redis")
 
     def process_log(self, job: LogJob):
         """Process a single log event - dispatches to appropriate handler"""
@@ -187,13 +182,9 @@ class LogProcessor:
             token_type = "erc20"
             amount = int(data, 16) if data != "0x" else 0
 
-        print(
-            f"Processing {token_type.upper()} Transfer: {token_address[:10]}... in tx {tx_hash[:10]}..."
-        )
+        print(f"Processing {token_type.upper()} Transfer: {token_address[:10]}... in tx {tx_hash[:10]}...")
 
-        token_symbol, token_decimals = self.token_service.get_metadata(
-            token_address, token_type
-        )
+        token_symbol, token_decimals = self.token_service.get_metadata(token_address, token_type)
 
         normalized_amount = None
         if token_type == "erc20" and token_decimals is not None and token_decimals > 0:
@@ -252,9 +243,7 @@ class LogProcessor:
         token_id = int(data[2:66], 16)
         amount = int(data[66:130], 16) if len(data) >= 130 else 0
 
-        print(
-            f"Processing ERC1155 Single: {token_address[:10]}... token #{token_id} in tx {tx_hash[:10]}..."
-        )
+        print(f"Processing ERC1155 Single: {token_address[:10]}... token #{token_id} in tx {tx_hash[:10]}...")
 
         token_symbol, _ = self.token_service.get_metadata(token_address, "erc1155")
 
@@ -315,14 +304,10 @@ class LogProcessor:
             values = decoded[1]
 
             if len(ids) != len(values):
-                print(
-                    f"  Error: ERC1155 batch has mismatched arrays (ids: {len(ids)}, values: {len(values)})"
-                )
+                print(f"  Error: ERC1155 batch has mismatched arrays (ids: {len(ids)}, values: {len(values)})")
                 return
 
-            print(
-                f"Processing ERC1155 Batch: {token_address[:10]}... ({len(ids)} tokens) in tx {tx_hash[:10]}..."
-            )
+            print(f"Processing ERC1155 Batch: {token_address[:10]}... ({len(ids)} tokens) in tx {tx_hash[:10]}...")
 
             token_symbol, _ = self.token_service.get_metadata(token_address, "erc1155")
 
@@ -354,7 +339,6 @@ class LogProcessor:
                     raw_log=job,
                 )
 
-                # Create NFT metadata record for each token in batch
                 if to_address:
                     self.nft_fetcher.create_nft_metadata(
                         token_address=token_address.lower(),
@@ -364,11 +348,11 @@ class LogProcessor:
                         tx_hash=tx_hash,
                     )
 
-            print(f"  ✓ Saved {len(ids)} ERC1155 batch transfers")
+            print(f"Saved {len(ids)} ERC1155 batch transfers")
 
         except Exception as e:
-            print(f"  Error decoding ERC1155 batch: {e}")
-            raise  # Re-raise so run() can record failure
+            print(f"Error decoding ERC1155 batch: {e}")
+            raise
 
     def _save_transfer(self, **kwargs):
         """Save a transfer to the database"""
@@ -405,39 +389,30 @@ class LogProcessor:
                 if kwargs.get("from_address")
                 else "None"
             )
-            to_addr = (
-                kwargs.get("to_address", "")[:8] if kwargs.get("to_address") else "None"
-            )
+            to_addr = (kwargs.get("to_address", "")[:8] if kwargs.get("to_address") else "None")
             amount = kwargs.get("normalized_amount")
             symbol = kwargs.get("token_symbol") or "???"
             token_type = kwargs.get("token_type", "").upper()
             token_id = kwargs.get("token_id")
 
             if token_id is not None:
-                print(
-                    f"  ✓ Saved {token_type}: {from_addr}... → {to_addr}... (Token #{token_id}, {symbol})"
-                )
+                print(f"Saved {token_type}: {from_addr}... → {to_addr}... (Token #{token_id}, {symbol})")
             else:
-                print(
-                    f"  ✓ Saved {token_type}: {from_addr}... → {to_addr}... ({amount} {symbol})"
-                )
+                print(f"Saved {token_type}: {from_addr}... → {to_addr}... ({amount} {symbol})")
         except IntegrityError:
             session.rollback()
-            print(f"  ⚠ Duplicate transfer (already processed)")
+            print(f"Duplicate transfer (already processed)")
         except Exception as e:
             session.rollback()
-            print(f"  ✗ Error saving transfer: {e}")
+            print(f"Error saving transfer: {e}")
             raise
         finally:
             session.close()
 
-    def _update_token_transfer_stats(
-        self, session: Session, address: str, block_number: int, sent: bool
-    ):
+    def _update_token_transfer_stats(self, session: Session, address: str, block_number: int, sent: bool):
         """Update token transfer counts for address using upsert to avoid deadlocks"""
         address_lower = address.lower()
 
-        # Use PostgreSQL's INSERT ... ON CONFLICT DO UPDATE (upsert)
         stmt = insert(AddressStats).values(
             address=address_lower,
             first_seen_block=block_number,
@@ -446,7 +421,6 @@ class LogProcessor:
             token_transfers_received=0 if sent else 1,
         )
 
-        # On conflict, update the existing record
         update_dict = {
             "last_seen_block": block_number,
             "updated_at": func.now(),
@@ -455,9 +429,7 @@ class LogProcessor:
         if sent:
             update_dict["token_transfers_sent"] = AddressStats.token_transfers_sent + 1
         else:
-            update_dict["token_transfers_received"] = (
-                AddressStats.token_transfers_received + 1
-            )
+            update_dict["token_transfers_received"] = (AddressStats.token_transfers_received + 1)
 
         stmt = stmt.on_conflict_do_update(
             index_elements=["address"],
@@ -495,7 +467,7 @@ class LogProcessor:
 
             return datetime.fromtimestamp(timestamp_int)
         except Exception as e:
-            print(f"  Warning: Could not parse timestamp {timestamp}: {e}")
+            print(f"Could not parse timestamp {timestamp}: {e}")
             return datetime.now()
 
     def _parse_int(self, value) -> Optional[int]:
