@@ -58,7 +58,7 @@ class Block(Base):
     __tablename__ = "blocks"
     block_number = Column(BigInteger, primary_key=True)
     block_hash = Column(Text, nullable=False)
-    canonical = Column(Boolean, default=True)  # Need logic for this
+    canonical = Column(Boolean, default=True)
     processed_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     worker_id = Column(String, nullable=True)
     worker_status = Column(SQLEnum(WorkerStatus))
@@ -183,7 +183,6 @@ class AddressStats(Base):
 
 
 class Swap(Base):
-    """DEX Swap transactions (Uniswap V2/V3, SushiSwap, etc.)"""
     __tablename__ = "swaps"
     transaction_hash = Column(String(66), primary_key=True)
     log_index = Column(Integer, primary_key=True)

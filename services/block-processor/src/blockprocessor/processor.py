@@ -96,6 +96,22 @@ class BlockProcessor:
                 # For non-rate-limit errors, fail immediately
                 raise
 
+    def is_canonical(self, block_number: int, block_hash: str) -> bool:
+        """
+        Check if a given block hash is the canonical one at the given height.
+        """
+        try:
+            # Fetch the current block at this height
+            canonical_block = self.web3.eth.get_block(block_number)
+
+            # Compare the hashes
+            current_canonical_hash = canonical_block["hash"].hex()
+
+            return current_canonical_hash == block_hash
+        except Exception as e:
+            print(f"Error checking canonical status: {e}")
+            return False
+
     def process_block(self, block_number: int, block_hash: str, block_status: str):
         """Fetch block, parse txs, write to DB."""
         session = SessionLocal()
@@ -118,6 +134,25 @@ class BlockProcessor:
                 )
 
             block = self._fetch_block_with_retry(block_number)
+
+            # Verify if the hash from the queue matches the actual canonical hash
+            actual_hash = block["hash"].hex()
+            is_canonical = actual_hash == block_hash
+
+            if not is_canonical:
+                print(
+                    f"Warning: Block {block_number} reorg detected. Queue hash: {block_hash}, Canonical hash: {actual_hash}"
+                )
+                # Update block_hash to use the canonical one
+                block_hash = actual_hash
+                if block_record:
+                    block_record.block_hash = actual_hash
+                    block_record.canonical = True  # Since we fetched it from get_block(number), it IS canonical
+
+            # If it matches, we can also explicitly set canonical=True
+            if block_record:
+                block_record.canonical = True
+
             block_ts = datetime.fromtimestamp(block["timestamp"])
             tx_count = len(block["transactions"])
             print(f"Processing {tx_count} txs from block {block_number}")
@@ -127,8 +162,12 @@ class BlockProcessor:
 
                 savepoint = session.begin_nested()
                 try:
-                    self._check_contract_creation(tx_data, block_number, block_ts, session)
-                    tx_model = self._parse_transaction(tx_data, block_number, block_hash, block_ts)
+                    self._check_contract_creation(
+                        tx_data, block_number, block_ts, session
+                    )
+                    tx_model = self._parse_transaction(
+                        tx_data, block_number, block_hash, block_ts
+                    )
                     session.add(tx_model)
 
                     if tx_model.from_address:
@@ -199,7 +238,9 @@ class BlockProcessor:
             status=1,
         )
 
-    def _check_contract_creation(self, tx: TxData, block_number, block_ts, session: Session):
+    def _check_contract_creation(
+        self, tx: TxData, block_number, block_ts, session: Session
+    ):
         """Check if transaction is a contract creation and store it."""
         # Contract creation: transaction with no 'to' address
         if tx.get("to") is None:
@@ -229,7 +270,9 @@ class BlockProcessor:
                     # Update deployer's contract deployment count
                     deployer = tx.get("from")
                     if deployer:
-                        self._update_address_stats(session, deployer, block_number, contract_deployment=True)
+                        self._update_address_stats(
+                            session, deployer, block_number, contract_deployment=True
+                        )
             except Exception as e:
                 print(f"Error processing contract creation {tx_hash}: {e}")
 
