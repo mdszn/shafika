@@ -66,16 +66,14 @@ def dex_processor(mock_web3):
 def test_process_uniswap_v2_swap(mock_session_local, dex_processor, mock_web3):
     # Setup mocks
     session = mock_session_local.return_value
-    mock_web3.eth.contract.return_value.functions.token0.return_value.call.return_value = (
-        VALID_TOKEN0
+
+    # Mock the internal methods that fetch pool tokens and factory
+    dex_processor._get_pool_tokens = MagicMock(
+        return_value=(VALID_TOKEN0, VALID_TOKEN1)
     )
-    mock_web3.eth.contract.return_value.functions.token1.return_value.call.return_value = (
-        VALID_TOKEN1
-    )
-    # Mock factory call to return Uniswap V2 factory
-    mock_web3.eth.contract.return_value.functions.factory.return_value.call.return_value = (
-        UNISWAP_V2_FACTORY
-    )
+    dex_processor._get_pool_factory = MagicMock(return_value=UNISWAP_V2_FACTORY)
+    dex_processor._get_dex_from_factory = MagicMock(return_value="uniswap_v2")
+    dex_processor._parse_timestamp = MagicMock(return_value=None)
 
     # Run
     dex_processor.process_uniswap_v2_swap(LOG_JOB_V2, LOG_JOB_V2["topics"])
@@ -96,12 +94,12 @@ def test_process_uniswap_v2_swap(mock_session_local, dex_processor, mock_web3):
 def test_process_uniswap_v3_swap(mock_session_local, dex_processor, mock_web3):
     # Setup mocks
     session = mock_session_local.return_value
-    mock_web3.eth.contract.return_value.functions.token0.return_value.call.return_value = (
-        VALID_TOKEN0
+
+    # Mock the internal method that fetches pool tokens
+    dex_processor._get_pool_tokens = MagicMock(
+        return_value=(VALID_TOKEN0, VALID_TOKEN1)
     )
-    mock_web3.eth.contract.return_value.functions.token1.return_value.call.return_value = (
-        VALID_TOKEN1
-    )
+    dex_processor._parse_timestamp = MagicMock(return_value=None)
 
     # Run
     dex_processor.process_uniswap_v3_swap(LOG_JOB_V3, LOG_JOB_V3["topics"])

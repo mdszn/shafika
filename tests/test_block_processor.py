@@ -5,13 +5,24 @@ from blockprocessor.processor import BlockProcessor
 
 @pytest.fixture
 def block_processor(mock_web3, mock_redis):
-    mock_web3.eth.get_block.return_value = {
-        "hash": b"0xHash",
+    # Create a mock HexBytes object for the hash
+    class MockHexBytes:
+        def __init__(self, hex_str):
+            self._hex = hex_str
+
+        def hex(self):
+            return self._hex
+
+    # Setup the mock to return the expected block
+    mock_block = {
+        "hash": MockHexBytes("0xCanonicalHash"),
         "number": 100,
         "timestamp": 1234567890,
         "parentHash": b"0xParent",
         "transactions": [],
     }
+    mock_web3.eth.get_block.return_value = mock_block
+
     return BlockProcessor(queue_name="blocks")
 
 
@@ -19,14 +30,35 @@ def block_processor(mock_web3, mock_redis):
 def test_process_block_success(mock_session_local, block_processor):
     session = mock_session_local.return_value
 
+    # Create a mock HexBytes object for the hash
+    class MockHexBytes:
+        def __init__(self, hex_str):
+            self._hex = hex_str
+
+        def hex(self):
+            return self._hex
+
+    # Mock the _fetch_block_with_retry method to return a specific canonical hash
+    block_processor._fetch_block_with_retry = MagicMock(
+        return_value={
+            "hash": MockHexBytes("0xCanonicalHash"),
+            "number": 100,
+            "timestamp": 1234567890,
+            "transactions": [],
+        }
+    )
+
     # process_block(block_number, block_hash, block_status)
-    block_processor.process_block(100, "0xBlockHash", "new")
+    # The processor now updates to the canonical hash from web3
+    block_processor.process_block(100, "0xOldHash", "new")
 
     assert session.add.called
     assert session.commit.called
     block = session.add.call_args[0][0]
     assert block.block_number == 100
-    assert block.block_hash == "0xBlockHash"
+    # Block hash should be updated to the canonical one from the mock
+    assert block.block_hash == "0xCanonicalHash"
+    assert block.canonical is True
 
 
 @patch("blockprocessor.processor.SessionLocal")
