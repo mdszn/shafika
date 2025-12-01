@@ -11,14 +11,8 @@ import redis
 class TokenMetadata:
     """Service for fetching and caching token metadata (symbol, decimals, etc.)"""
 
-    _etherscan_api_key: str
-
     def __init__(self, web3: Web3):
-        _etherscan_api_key = os.getenv("ETHERSCAN_API_KEY")
-        if not _etherscan_api_key:
-            raise ValueError("ETH_WS_URL not set in environment")
         self.web3 = web3
-        self._etherscan_api_key = _etherscan_api_key
 
     def get_metadata(self, token_address: str, token_type: str = "erc20"):
         """
@@ -45,8 +39,8 @@ class TokenMetadata:
 
         return self._fetch_from_blockchain(token_address_lower, token_type)
 
-    def get_eth_price(self, redis_client: redis.Redis, ttl: int = 5):
-        """Fetch ETH/USD Price"""
+    def get_eth_price(self, redis_client: redis.Redis, ttl: int = 10):
+        """Fetch ETH/USD Price from CryptoCompare"""
 
         if redis_client:
             cached_price = redis_client.get("eth_price")
@@ -54,27 +48,17 @@ class TokenMetadata:
                 return float(cached_price)
 
         try:
-            endpoint = (
-                f"https://api.etherscan.io/v2/api"
-                f"?chainid=1"
-                f"&module=stats"
-                f"&action=ethprice"
-                f"&apikey={self._etherscan_api_key}"
-            )
+            endpoint = "https://min-api.cryptocompare.com/data/price?fsym=ETH&tsyms=USD"
 
             response = requests.get(endpoint, timeout=10)
             response.raise_for_status()
 
             response_data = response.json()
 
-            result = response_data.get("result")
-            if not result:
-                raise Exception("Missing 'result' in API response")
-
-            eth_usd = result.get("ethusd")
+            eth_usd = response_data.get("USD")
 
             if eth_usd is None:
-                raise Exception("Missing 'ethusd' in API response")
+                raise Exception("Missing 'USD' in API response")
 
             price = float(eth_usd)
 
@@ -139,7 +123,7 @@ class TokenMetadata:
                     "type": "function",
                 }
             ]
-        else: # ERC20
+        else:  # ERC20
             return [
                 {
                     "constant": True,
