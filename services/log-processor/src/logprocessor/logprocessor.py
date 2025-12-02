@@ -1,31 +1,23 @@
 import os
 from datetime import datetime
 from typing import Optional
-from sqlalchemy.exc import IntegrityError
+
+from common.db import SessionLocal
+from common.dex import (UNISWAP_V2_SWAP_SIGNATURE, UNISWAP_V3_SWAP_SIGNATURE,
+                        DexProcessor)
+from common.failedjob import FailedJobManager
+from common.nft import NftMetadataFetcher
+from common.queue import RedisQueueManager
+from common.token import TokenMetadata
+from dotenv import load_dotenv
+from eth_abi.abi import decode
 from sqlalchemy import func
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from web3 import Web3
-from dotenv import load_dotenv
-from common.queue import RedisQueueManager
-from common.db import SessionLocal
-from common.token import TokenMetadata
-from common.dex import (
-    UNISWAP_V2_SWAP_SIGNATURE,
-    UNISWAP_V3_SWAP_SIGNATURE,
-    DexProcessor,
-)
-from common.nft import NftMetadataFetcher
-from db.models.models import (
-    LogJob,
-    Transfer,
-    Approval,
-    AddressStats,
-    JobType,
-)
-from eth_abi.abi import decode
-from common.failedjob import FailedJobManager
 
+from db.models.models import AddressStats, Approval, JobType, LogJob, Transfer
 
 # Event signatures
 TRANSFER_EVENT_SIGNATURE = (
@@ -84,7 +76,7 @@ class LogProcessor:
                     else:
                         print(f"Could not remove {job_id} from failed_jobs table")
             except Exception as e:
-                print(f"Erro processing log for Job")
+                print("Error processing log for Job")
                 if self.failed_job.record(job_id, job, str(e)):
                     self.redis_client.delete_job(job_id)
                 else:
@@ -182,9 +174,13 @@ class LogProcessor:
             token_type = "erc20"
             amount = int(data, 16) if data != "0x" else 0
 
-        print(f"Processing {token_type.upper()} Transfer: {token_address[:10]}... in tx {tx_hash[:10]}...")
+        print(
+            f"Processing {token_type.upper()} Transfer: {token_address[:10]}... in tx {tx_hash[:10]}..."
+        )
 
-        token_symbol, token_decimals = self.token_service.get_metadata(token_address, token_type)
+        token_symbol, token_decimals = self.token_service.get_metadata(
+            token_address, token_type
+        )
 
         normalized_amount = None
         if token_type == "erc20" and token_decimals is not None and token_decimals > 0:
@@ -243,7 +239,9 @@ class LogProcessor:
         token_id = int(data[2:66], 16)
         amount = int(data[66:130], 16) if len(data) >= 130 else 0
 
-        print(f"Processing ERC1155 Single: {token_address[:10]}... token #{token_id} in tx {tx_hash[:10]}...")
+        print(
+            f"Processing ERC1155 Single: {token_address[:10]}... token #{token_id} in tx {tx_hash[:10]}..."
+        )
 
         token_symbol, _ = self.token_service.get_metadata(token_address, "erc1155")
 
@@ -304,10 +302,14 @@ class LogProcessor:
             values = decoded[1]
 
             if len(ids) != len(values):
-                print(f"  Error: ERC1155 batch has mismatched arrays (ids: {len(ids)}, values: {len(values)})")
+                print(
+                    f"  Error: ERC1155 batch has mismatched arrays (ids: {len(ids)}, values: {len(values)})"
+                )
                 return
 
-            print(f"Processing ERC1155 Batch: {token_address[:10]}... ({len(ids)} tokens) in tx {tx_hash[:10]}...")
+            print(
+                f"Processing ERC1155 Batch: {token_address[:10]}... ({len(ids)} tokens) in tx {tx_hash[:10]}..."
+            )
 
             token_symbol, _ = self.token_service.get_metadata(token_address, "erc1155")
 
@@ -389,19 +391,25 @@ class LogProcessor:
                 if kwargs.get("from_address")
                 else "None"
             )
-            to_addr = (kwargs.get("to_address", "")[:8] if kwargs.get("to_address") else "None")
+            to_addr = (
+                kwargs.get("to_address", "")[:8] if kwargs.get("to_address") else "None"
+            )
             amount = kwargs.get("normalized_amount")
             symbol = kwargs.get("token_symbol") or "???"
             token_type = kwargs.get("token_type", "").upper()
             token_id = kwargs.get("token_id")
 
             if token_id is not None:
-                print(f"Saved {token_type}: {from_addr}... → {to_addr}... (Token #{token_id}, {symbol})")
+                print(
+                    f"Saved {token_type}: {from_addr}... → {to_addr}... (Token #{token_id}, {symbol})"
+                )
             else:
-                print(f"Saved {token_type}: {from_addr}... → {to_addr}... ({amount} {symbol})")
+                print(
+                    f"Saved {token_type}: {from_addr}... → {to_addr}... ({amount} {symbol})"
+                )
         except IntegrityError:
             session.rollback()
-            print(f"Duplicate transfer (already processed)")
+            print("Duplicate transfer (already processed)")
         except Exception as e:
             session.rollback()
             print(f"Error saving transfer: {e}")
@@ -409,7 +417,9 @@ class LogProcessor:
         finally:
             session.close()
 
-    def _update_token_transfer_stats(self, session: Session, address: str, block_number: int, sent: bool):
+    def _update_token_transfer_stats(
+        self, session: Session, address: str, block_number: int, sent: bool
+    ):
         """Update token transfer counts for address using upsert to avoid deadlocks"""
         address_lower = address.lower()
 
@@ -429,7 +439,9 @@ class LogProcessor:
         if sent:
             update_dict["token_transfers_sent"] = AddressStats.token_transfers_sent + 1
         else:
-            update_dict["token_transfers_received"] = (AddressStats.token_transfers_received + 1)
+            update_dict["token_transfers_received"] = (
+                AddressStats.token_transfers_received + 1
+            )
 
         stmt = stmt.on_conflict_do_update(
             index_elements=["address"],

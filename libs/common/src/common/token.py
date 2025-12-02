@@ -1,11 +1,12 @@
 from typing import Optional
-from redis.client import Redis
-from web3 import Web3
-from .db import SessionLocal
-from db.models.models import Token
-import requests
-import os
+
 import redis
+import requests
+from web3 import Web3
+
+from db.models.models import Token
+
+from .db import SessionLocal
 
 
 class TokenMetadata:
@@ -84,7 +85,9 @@ class TokenMetadata:
             decimals = self._fetch_decimals(contract, token_type)
 
             result = (symbol, decimals)
-            self._save_to_db(token_address, token_type, symbol, name, decimals, failed=False)
+            self._save_to_db(
+                token_address, token_type, symbol, name, decimals, failed=False
+            )
 
             return result
 

@@ -1,10 +1,12 @@
-import os
 import asyncio
 import json
-from websockets import connect
-from dotenv import load_dotenv
+import os
+
 from common.queue import RedisQueueManager
-from db.models.models import JobType, BlockJob
+from dotenv import load_dotenv
+from websockets import connect
+
+from db.models.models import BlockJob, JobType
 
 
 class BlockPoller:
@@ -29,7 +31,7 @@ class BlockPoller:
         self.queue_name = queue_name
 
     async def stream_new_block(self):
-        print(f"Starting block poller")
+        print("Starting block poller")
         while True:
             try:
                 async with connect(self.ws_url) as ws:
@@ -64,7 +66,9 @@ class BlockPoller:
                                     "block_hash": block_hash,
                                     "status": "new",
                                 }
-                                self.redis_client.push_json(self.queue_name, job_id, job_data)
+                                self.redis_client.push_json(
+                                    self.queue_name, job_id, job_data
+                                )
                             yield header
             except Exception as e:
                 print(f"ERROR: {type(e).__name__}: {e}")

@@ -1,11 +1,12 @@
 import asyncio
+
 from .blockpoller import BlockPoller
 
 
 def main() -> None:
     try:
         poller = BlockPoller()
-        print(f"Redis connected")
+        print("Redis connected")
     except Exception as e:
         print(f"FATAL ERROR during initialization: {e}")
         raise

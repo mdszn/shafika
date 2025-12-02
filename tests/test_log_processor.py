@@ -1,11 +1,8 @@
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import MagicMock, patch, call
-from logprocessor.logprocessor import (
-    LogProcessor,
-    UNISWAP_V2_SWAP_SIGNATURE,
-    TRANSFER_EVENT_SIGNATURE,
-    AddressStats,
-)
+from logprocessor.logprocessor import (TRANSFER_EVENT_SIGNATURE,
+                                       UNISWAP_V2_SWAP_SIGNATURE, LogProcessor)
 
 
 @pytest.fixture
@@ -29,8 +26,6 @@ def test_process_log_delegates_dex(mock_session, log_processor):
 @patch("logprocessor.logprocessor.SessionLocal")
 def test_save_transfer_deadlock_prevention(mock_session_local, log_processor):
     """Test that address updates are sorted to prevent deadlocks"""
-    session = mock_session_local.return_value
-
     # We mock _update_token_transfer_stats to track call order
     log_processor._update_token_transfer_stats = MagicMock()
 

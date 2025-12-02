@@ -1,7 +1,9 @@
-import redis
 import json
 import os
-from db.models.models import LogJob, BlockJob
+
+import redis
+
+from db.models.models import BlockJob, LogJob
 
 
 class RedisQueueManager:
