@@ -1,8 +1,10 @@
-from common.db import SessionLocal
-from db.models.models import FailedJob, LogJob, BlockJob, JobType, WorkerStatus
-from sqlalchemy import select
-from common.queue import RedisQueueManager
 from datetime import datetime
+
+from common.db import SessionLocal
+from common.queue import RedisQueueManager
+from sqlalchemy import select
+
+from db.models.models import BlockJob, FailedJob, JobType, LogJob, WorkerStatus
 
 
 class FailedJobManager:

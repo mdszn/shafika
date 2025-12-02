@@ -1,10 +1,12 @@
-import os
 import asyncio
 import json
-from websockets import connect
-from dotenv import load_dotenv
+import os
+
 from common.queue import RedisQueueManager
-from db.models.models import LogJob, JobType
+from dotenv import load_dotenv
+from websockets import connect
+
+from db.models.models import JobType, LogJob
 
 
 class LogPoller:

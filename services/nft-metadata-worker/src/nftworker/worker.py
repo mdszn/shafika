@@ -1,12 +1,14 @@
 import os
 import time
 from datetime import datetime, timedelta
-from dotenv import load_dotenv
-from web3 import Web3
+
 from common.db import SessionLocal
 from common.nft import NftMetadataFetcher
-from db.models.models import NftMetadata
+from dotenv import load_dotenv
 from sqlalchemy import func
+from web3 import Web3
+
+from db.models.models import NftMetadata
 
 
 class NftMetadataWorker:
@@ -32,8 +34,8 @@ class NftMetadataWorker:
                 unfetched_nfts = (
                     session.query(NftMetadata)
                     .filter(
-                        NftMetadata.metadata_fetched == False,
-                        NftMetadata.metadata_fetch_failed == False,
+                        ~NftMetadata.metadata_fetched,
+                        ~NftMetadata.metadata_fetch_failed,
                     )
                     .limit(self.batch_size)
                     .all()
@@ -46,13 +48,13 @@ class NftMetadataWorker:
                         self._fetch_and_update_metadata(nft, session)
 
                     session.commit()
-                    print(f"Batch complete\n")
+                    print("Batch complete\n")
                 else:
-                    
+
                     retry_nfts = (
                         session.query(NftMetadata)
                         .filter(
-                            NftMetadata.metadata_fetch_failed == True,
+                            NftMetadata.metadata_fetch_failed,
                             NftMetadata.last_fetched_at
                             < datetime.now() - timedelta(days=1),
                         )
@@ -65,7 +67,7 @@ class NftMetadataWorker:
                         for nft in retry_nfts:
                             self._fetch_and_update_metadata(nft, session)
                         session.commit()
-                        print(f"Retry batch complete\n")
+                        print("Retry batch complete\n")
                     else:
                         print("No NFTs to process. Sleeping...")
 
@@ -110,11 +112,11 @@ class NftMetadataWorker:
                 else:
                     nft.metadata_fetch_failed = True
                     nft.metadata_fetch_error = "Failed to fetch metadata from URI"
-                    print(f"Failed to fetch metadata from URI")
+                    print("Failed to fetch metadata from URI")
             else:
                 nft.metadata_fetch_failed = True
                 nft.metadata_fetch_error = "Failed to get tokenURI from contract"
-                print(f"Failed to get tokenURI")
+                print("Failed to get tokenURI")
 
         except Exception as e:
             nft.metadata_fetch_failed = True

@@ -1,13 +1,15 @@
 import os
 from typing import cast
+
+from common.failedjob import FailedJobManager
+from common.queue import RedisQueueManager
+from dotenv import load_dotenv
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from web3 import Web3
 from web3.types import FilterParams
-from dotenv import load_dotenv
-from common.failedjob import FailedJobManager
-from common.queue import RedisQueueManager
-from db.models.models import JobType, BlockJob, LogJob
+
+from db.models.models import BlockJob, JobType, LogJob
 
 load_dotenv()
 
@@ -40,7 +42,8 @@ def redrive_failed_jobs():
             return jsonify({"status": "internal server error"}), 500
     except Exception as e:
         return jsonify({"error": "Failed to redrive blocks", "details": str(e)}), 500
-    
+
+
 @app.route("/api/redrive-logs", methods=["POST"])
 def redrive_failed_logs():
     try:
@@ -125,7 +128,6 @@ def backfill():
             redis_client.push_json("blocks", job_id, job_data)
             blocks_queued += 1
 
-        
         log_filter: dict = {}
 
         total_logs = 0
@@ -155,7 +157,9 @@ def backfill():
                                 int(timestamp) if timestamp else 0
                             )
                         except Exception as e:
-                            print(f"Warning: Could not fetch timestamp for block {block_number}: {e}")
+                            print(
+                                f"Warning: Could not fetch timestamp for block {block_number}: {e}"
+                            )
                             block_timestamp_cache[block_number] = 0
 
                     block_timestamp = block_timestamp_cache[block_number]

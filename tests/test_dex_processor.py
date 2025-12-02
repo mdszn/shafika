@@ -1,10 +1,11 @@
-import pytest
 from unittest.mock import MagicMock, patch
+
+import pytest
 from common.dex import (
-    DexProcessor,
+    UNISWAP_V2_FACTORY,
     UNISWAP_V2_SWAP_SIGNATURE,
     UNISWAP_V3_SWAP_SIGNATURE,
-    UNISWAP_V2_FACTORY,
+    DexProcessor,
 )
 
 # Sample data

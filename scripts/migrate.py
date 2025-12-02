@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run database migrations."""
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../libs/common/src"))
 

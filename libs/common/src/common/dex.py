@@ -1,10 +1,11 @@
 from datetime import datetime
 from typing import Optional
-from web3 import Web3
-from sqlalchemy.exc import IntegrityError
-from common.db import SessionLocal
-from db.models.models import LogJob, Swap
 
+from common.db import SessionLocal
+from sqlalchemy.exc import IntegrityError
+from web3 import Web3
+
+from db.models.models import LogJob, Swap
 
 UNISWAP_V2_SWAP_SIGNATURE = (
     "0xd78ad95fa46c994b6551d0da85fc275fe613ce37657fb8d5e3d130840159d822"
@@ -19,7 +20,6 @@ UNISWAP_V3_SWAP_SIGNATURE = (
 UNISWAP_V2_FACTORY = "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f"
 UNISWAP_V3_FACTORY = "0x1F98431c8aD98523631AE4a59f267346ea31F984"
 SUSHISWAP_FACTORY = "0xC0AEe478e3658e2610c5F7A4A2E1777cE9e4f2Ac"
-
 
 
 class DexProcessor:
@@ -131,7 +131,9 @@ class DexProcessor:
             amount1_in = str(abs(amount1)) if amount1 < 0 else "0"
             amount1_out = str(amount1) if amount1 > 0 else "0"
 
-            print(f"Processing V3 Swap: Pool {pool_address[:10]}... - {amount0_in or amount0_out}/{amount1_in or amount1_out}")
+            print(
+                f"Processing V3 Swap: Pool {pool_address[:10]}... - {amount0_in or amount0_out}/{amount1_in or amount1_out}"
+            )
 
             token0, token1 = self._get_pool_tokens(pool_address)
 
@@ -164,7 +166,7 @@ class DexProcessor:
 
                 session.add(swap)
                 session.commit()
-                print(f"Indexed V3 swap")
+                print("Indexed V3 swap")
 
             except IntegrityError:
                 session.rollback()

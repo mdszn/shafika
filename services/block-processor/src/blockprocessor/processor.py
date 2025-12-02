@@ -1,26 +1,28 @@
 import os
 import time
 from datetime import datetime
-from sqlalchemy.orm import Session
-from web3 import Web3
-from web3.types import BlockData, TxData, RPCEndpoint
 from typing import cast
-from dotenv import load_dotenv
-from common.queue import RedisQueueManager
+
 from common.db import SessionLocal
-from db.models.models import (
-    Block,
-    Transaction,
-    Contract,
-    AddressStats,
-    WorkerStatus,
-    JobType,
-)
 from common.failedjob import FailedJobManager
+from common.queue import RedisQueueManager
 from common.token import TokenMetadata
+from dotenv import load_dotenv
 from requests.exceptions import HTTPError
 from sqlalchemy import func
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.orm import Session
+from web3 import Web3
+from web3.types import TxData
+
+from db.models.models import (
+    AddressStats,
+    Block,
+    Contract,
+    JobType,
+    Transaction,
+    WorkerStatus,
+)
 
 
 class BlockProcessor:
@@ -76,7 +78,9 @@ class BlockProcessor:
                 if self.failed_job.record(job_id, job, str(e)):
                     self.redis_client.delete_job(job_id)
                 else:
-                    print(f"CRITICAL: Could not record failure for {job_id} - left in Redis")
+                    print(
+                        f"CRITICAL: Could not record failure for {job_id} - left in Redis"
+                    )
 
     def _fetch_block_with_retry(self, block_number: int, max_retries: int = 5):
         """Fetch block from Web3 with exponential backoff for rate limiting."""
@@ -86,13 +90,15 @@ class BlockProcessor:
             except HTTPError as e:
                 if e.response.status_code == 429:
                     wait_time = (2**attempt) + (attempt * 0.5)  # Exponential backoff
-                    print(f"Rate limited (429) on block {block_number}, retrying in {wait_time:.1f}s (attempt {attempt + 1}/{max_retries})")
+                    print(
+                        f"Rate limited (429) on block {block_number}, retrying in {wait_time:.1f}s (attempt {attempt + 1}/{max_retries})"
+                    )
                     time.sleep(wait_time)
                     if attempt == max_retries - 1:
                         raise
                 else:
                     raise
-            except Exception as e:
+            except Exception:
                 # For non-rate-limit errors, fail immediately
                 raise
 

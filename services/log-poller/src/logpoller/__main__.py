@@ -1,4 +1,5 @@
 import asyncio
+
 from .logpoller import LogPoller
 
 
@@ -8,7 +9,7 @@ def main() -> None:
 
     async def run() -> None:
         async for log in poller.stream_new_logs():
-            address = log.get("address", "N/A")
+            pass  # Just consume the logs
 
     asyncio.run(run())
 

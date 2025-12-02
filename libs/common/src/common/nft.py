@@ -1,10 +1,12 @@
-import requests
 import base64
 import json
-from web3 import Web3
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy import func
+
+import requests
 from common.db import SessionLocal
+from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
+from web3 import Web3
+
 from db.models.models import NftMetadata
 
 
@@ -107,8 +109,8 @@ class NftMetadataFetcher:
                 response = requests.get(url, timeout=10)
                 response.raise_for_status()
                 return response.json()
-            except Exception as e:
-                continue # Go on and try next gateway
+            except Exception:
+                continue  # Go on and try next gateway
 
         print(f"Failed to fetch from all IPFS gateways for {ipfs_hash}")
         return None

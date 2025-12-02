@@ -14,6 +14,7 @@ sys.path.insert(0, "/app/db")
 sys.path.insert(0, "/app/libs/common/src")
 
 from sqlalchemy import create_engine
+
 from db.models.models import Base
 
 db_user = os.getenv("POSTGRES_USER", "postgres")
@@ -28,12 +29,12 @@ DATABASE_URL = f"postgresql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
 try:
 
     engine = create_engine(DATABASE_URL)
-    
+
     print("Creating all tables...")
     Base.metadata.create_all(engine)
-    
+
     print("DATABASE INITIALIZED SUCCESSFULLY")
-    
+
 except Exception as e:
     print("DATABASE INITIALIZATION FAILED")
     print(f"Error: {e}")

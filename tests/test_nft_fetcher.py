@@ -1,5 +1,6 @@
-import pytest
 from unittest.mock import MagicMock, patch
+
+import pytest
 from common.nft import NftMetadataFetcher
 
 VALID_CONTRACT = "0x0000000000000000000000000000000000000001"
