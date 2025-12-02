@@ -3,8 +3,11 @@ from datetime import datetime
 from typing import Optional
 
 from common.db import SessionLocal
-from common.dex import (UNISWAP_V2_SWAP_SIGNATURE, UNISWAP_V3_SWAP_SIGNATURE,
-                        DexProcessor)
+from common.dex import (
+    UNISWAP_V2_SWAP_SIGNATURE,
+    UNISWAP_V3_SWAP_SIGNATURE,
+    DexProcessor,
+)
 from common.failedjob import FailedJobManager
 from common.nft import NftMetadataFetcher
 from common.queue import RedisQueueManager

@@ -1,8 +1,12 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
-from common.dex import (UNISWAP_V2_FACTORY, UNISWAP_V2_SWAP_SIGNATURE,
-                        UNISWAP_V3_SWAP_SIGNATURE, DexProcessor)
+from common.dex import (
+    UNISWAP_V2_FACTORY,
+    UNISWAP_V2_SWAP_SIGNATURE,
+    UNISWAP_V3_SWAP_SIGNATURE,
+    DexProcessor,
+)
 
 # Sample data
 VALID_POOL = "0x0000000000000000000000000000000000000001"

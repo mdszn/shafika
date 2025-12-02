@@ -26,6 +26,17 @@ jobs:
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
     
+    - name: Create .env file for docker-compose
+      run: |
+        cat > .env << EOF
+        POSTGRES_USER=postgres
+        POSTGRES_PASSWORD=postgres
+        POSTGRES_DB=eth_indexer
+        POSTGRES_HOST=postgres
+        POSTGRES_PORT=5432
+        RPC_URL=http://localhost:8545
+        EOF
+    
     - name: Build ${{ matrix.service }}
       run: |
         docker compose build ${{ matrix.service }}
@@ -41,6 +52,17 @@ jobs:
     
     steps:
     - uses: actions/checkout@v4
+    
+    - name: Create .env file for docker-compose validation
+      run: |
+        cat > .env << EOF
+        POSTGRES_USER=postgres
+        POSTGRES_PASSWORD=postgres
+        POSTGRES_DB=eth_indexer
+        POSTGRES_HOST=postgres
+        POSTGRES_PORT=5432
+        RPC_URL=http://localhost:8545
+        EOF
     
     - name: Validate docker-compose.yml
       run: |

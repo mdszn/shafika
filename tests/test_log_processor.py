@@ -1,8 +1,11 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
-from logprocessor.logprocessor import (TRANSFER_EVENT_SIGNATURE,
-                                       UNISWAP_V2_SWAP_SIGNATURE, LogProcessor)
+from logprocessor.logprocessor import (
+    TRANSFER_EVENT_SIGNATURE,
+    UNISWAP_V2_SWAP_SIGNATURE,
+    LogProcessor,
+)
 
 
 @pytest.fixture

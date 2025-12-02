@@ -15,8 +15,14 @@ from sqlalchemy.orm import Session
 from web3 import Web3
 from web3.types import TxData
 
-from db.models.models import (AddressStats, Block, Contract, JobType,
-                              Transaction, WorkerStatus)
+from db.models.models import (
+    AddressStats,
+    Block,
+    Contract,
+    JobType,
+    Transaction,
+    WorkerStatus,
+)
 
 
 class BlockProcessor:
