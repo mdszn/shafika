@@ -70,7 +70,26 @@ This spins up everything you need:
 - NFT metadata worker (fetches images and metadata)
 - API server (runs on http://localhost:8000)
 
-### 3. Watching Logs
+### 3. Generate Admin API Key
+
+The API server requires authentication. Generate an admin API key:
+
+```bash
+# Generate a new admin API key
+docker compose exec api python /app/scripts/generate_admin_api_key.py admin
+
+# Or with a custom username
+docker compose exec api python /app/scripts/generate_admin_api_key.py myusername
+```
+
+This will output an API key that will only be shown once. Store it securely as you cannot retrieve it later.
+
+**Note:** You can regenerate a new key for the same user by running the command again (the old key will be invalidated).
+```
+
+**Save this API key** - you'll need it for all API requests (except `/api/health`).
+
+### 4. Watching Logs
 
 ```bash
 # See everything
@@ -88,11 +107,12 @@ By default, Shafika only indexes new blocks going forward. To sync historical da
 
 ### How to Backfill
 
-Hit the API with the block range you want:
+Hit the API with the block range you want (using your API key):
 
 ```bash
 curl -X POST http://localhost:8000/api/backfill \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: YOUR_API_KEY_HERE" \
   -d '{
     "start": 19000000,
     "end": 19001000,
@@ -116,10 +136,12 @@ For large ranges, break it up. Most RPC providers have limits:
 
 ```bash
 # Loop through in 10k block chunks
+API_KEY="YOUR_API_KEY_HERE"
 for i in {19000000..19100000..10000}; do
   end=$((i + 9999))
   curl -X POST http://localhost:8000/api/backfill \
     -H "Content-Type: application/json" \
+    -H "X-API-Key: $API_KEY" \
     -d "{\"start\": $i, \"end\": $end}"
   sleep 2
 done

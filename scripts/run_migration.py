@@ -3,10 +3,7 @@
 import os
 import sys
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../libs/common/src"))
-
 from common.db import execute_sql_file
-
 
 def main():
     if len(sys.argv) < 2:

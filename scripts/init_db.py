@@ -9,10 +9,6 @@ It runs once during Docker Compose startup via the db-init service.
 import os
 import sys
 
-sys.path.insert(0, "/app")
-sys.path.insert(0, "/app/db")
-sys.path.insert(0, "/app/libs/common/src")
-
 from sqlalchemy import create_engine
 
 from db.models.models import Base

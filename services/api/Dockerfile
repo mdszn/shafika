@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y \
 
 COPY db /app/db
 COPY libs/common /app/libs/common
+COPY scripts /app/scripts
 
 RUN pip install --no-cache-dir -e /app/libs/common
 

@@ -229,3 +229,13 @@ class FailedJob(Base):
     last_retry_at = Column(TIMESTAMP(timezone=True), nullable=True)
     status = Column(SQLEnum(WorkerStatus), default=WorkerStatus.ERROR)
     worker_id = Column(Text, nullable=True)
+
+
+class Admin(Base):
+    __tablename__ = "admins"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    username = Column(String(100), unique=True, nullable=False)
+    api_key_hash = Column(String(32), nullable=False)  # MD5 hash
+    is_active = Column(Boolean, default=True)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    last_used_at = Column(TIMESTAMP(timezone=True), nullable=True)

@@ -265,7 +265,7 @@ class DexProcessor:
             print(f"Could not parse timestamp {timestamp}: {e}")
             return datetime.now()
 
-    def _get_dex_from_factory(factory_address: str) -> str:
+    def _get_dex_from_factory(self, factory_address: str) -> str:
         """Get DEX name from factory address"""
         if not factory_address:
             return "unknown"
