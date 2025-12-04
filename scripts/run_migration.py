@@ -5,6 +5,7 @@ import sys
 
 from common.db import execute_sql_file
 
+
 def main():
     if len(sys.argv) < 2:
         print("Usage: python run_migration.py <migration_file>")
