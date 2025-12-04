@@ -9,6 +9,7 @@ from flask_cors import CORS
 from web3 import Web3
 from web3.types import FilterParams
 
+from api.middleware import require_api_key
 from db.models.models import BlockJob, JobType, LogJob
 
 load_dotenv()
@@ -26,11 +27,12 @@ else:
 
 @app.route("/api/health", methods=["GET"])
 def health():
-    """Health check endpoint."""
+    """Health check endpoint (no auth required)."""
     return jsonify({"status": "healthy", "service": "ethereum-indexer-api"})
 
 
 @app.route("/api/redrive-blocks", methods=["POST"])
+@require_api_key
 def redrive_failed_jobs():
     try:
         failed_blocks = FailedJobManager("blocks", JobType.BLOCK)
@@ -45,6 +47,7 @@ def redrive_failed_jobs():
 
 
 @app.route("/api/redrive-logs", methods=["POST"])
+@require_api_key
 def redrive_failed_logs():
     try:
         failed_logs = FailedJobManager("logs", JobType.LOG)
@@ -59,6 +62,7 @@ def redrive_failed_logs():
 
 
 @app.route("/api/backfill", methods=["POST"])
+@require_api_key
 def backfill():
     """
     Unified backfill endpoint - queues both blocks AND logs for a range.
@@ -218,7 +222,7 @@ def backfill():
                         return (
                             jsonify(
                                 {
-                                    "error": "Unable to fetch logs - too many logs even in small batches",
+                                    "error": "Unable to fetch logs. Too many logs even in small batches",
                                     "details": error_str,
                                     "failed_at_block": current_block,
                                     "blocks_queued": blocks_queued,

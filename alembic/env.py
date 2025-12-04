@@ -1,10 +1,5 @@
 from logging.config import fileConfig
-import sys
 import os
-
-# Add project root to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../libs/common/src'))
 
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
@@ -12,6 +7,7 @@ from sqlalchemy import pool
 from alembic import context
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 config = context.config
@@ -24,14 +20,14 @@ DATABASE_URL = (
     f":{os.getenv('POSTGRES_PORT')}"
     f"/{os.getenv('POSTGRES_DB')}"
 )
-config.set_main_option('sqlalchemy.url', DATABASE_URL)
+config.set_main_option("sqlalchemy.url", DATABASE_URL)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 from db.models.models import Base
-target_metadata = Base.metadata
 
+target_metadata = Base.metadata
 
 
 def run_migrations_offline():
