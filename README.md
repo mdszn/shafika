@@ -1,6 +1,6 @@
 # Shafika
 
-An open-source Ethereum indexer that puts you back in control of your blockchain data.
+An open-source Ethereum indexer that crawls and ingests blockchain data for you to own.
 
 ## What Gets Indexed
 

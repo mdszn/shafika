@@ -2,7 +2,7 @@ services:
   # PostgreSQL Database
   postgres:
     image: postgres:17-alpine
-    container_name: eth-postgres
+    container_name: postgres-db
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-eth_indexer}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
@@ -21,7 +21,7 @@ services:
   # Redis Cache & Queue
   redis:
     image: redis:7-alpine
-    container_name: eth-redis
+    container_name: redis-queue
     ports:
       - "6379:6379"
     volumes:
@@ -37,7 +37,7 @@ services:
     build:
       context: .
       dockerfile: services/block-processor/Dockerfile
-    container_name: eth-db-init
+    container_name: init-db
     env_file:
       - .env
     environment:
@@ -135,7 +135,7 @@ services:
     build:
       context: .
       dockerfile: services/api/Dockerfile
-    container_name: eth-api
+    container_name: api-server
     env_file:
       - .env
     environment:
@@ -158,7 +158,7 @@ services:
     build:
       context: .
       dockerfile: services/nft-metadata-worker/Dockerfile
-    container_name: eth-nft-metadata-worker
+    container_name: nft-metadata-worker
     env_file:
       - .env
     environment:
