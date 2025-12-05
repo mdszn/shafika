@@ -62,6 +62,8 @@ class Block(Base):
     processed_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     worker_id = Column(String, nullable=True)
     worker_status = Column(SQLEnum(WorkerStatus))
+    base_fee_per_gas = Column(Numeric(38, 0), nullable=True)
+    burned_eth = Column(Numeric(38, 0), nullable=True)  # In Wei
     extra = Column(JSON, nullable=True)
 
 
@@ -77,6 +79,10 @@ class Transaction(Base):
     value_usd = Column(Float)
     gas_used = Column(BigInteger)
     gas_price = Column(Numeric(38, 0))
+    effective_gas_price = Column(Numeric(38, 0), nullable=True)
+    max_fee_per_gas = Column(Numeric(38, 0), nullable=True)
+    max_priority_fee_per_gas = Column(Numeric(38, 0), nullable=True)
+    txn_type = Column(SmallInteger, nullable=True)
     input = Column(Text)
     status = Column(SmallInteger)
 

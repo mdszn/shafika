@@ -159,6 +159,17 @@ class BlockProcessor:
             if block_record:
                 block_record.canonical = True
 
+            # EIP-1559 Fields
+            base_fee = block.get("baseFeePerGas")
+            gas_used = block.get("gasUsed", 0)
+            burned_eth = None
+
+            if base_fee is not None:
+                burned_eth = base_fee * gas_used
+                if block_record:
+                    block_record.base_fee_per_gas = base_fee
+                    block_record.burned_eth = burned_eth
+
             block_ts = datetime.fromtimestamp(block["timestamp"])
             tx_count = len(block["transactions"])
             print(f"Processing {tx_count} txs from block {block_number}")
@@ -172,7 +183,7 @@ class BlockProcessor:
                         tx_data, block_number, block_ts, session
                     )
                     tx_model = self._parse_transaction(
-                        tx_data, block_number, block_hash, block_ts
+                        tx_data, block_number, block_hash, block_ts, base_fee
                     )
                     session.add(tx_model)
 
@@ -219,7 +230,9 @@ class BlockProcessor:
         finally:
             session.close()
 
-    def _parse_transaction(self, tx: TxData, block_number, block_hash, block_ts):
+    def _parse_transaction(
+        self, tx: TxData, block_number, block_hash, block_ts, base_fee_per_gas=None
+    ):
         """Parse a single transaction."""
 
         eth_price = self.token.get_eth_price(self.redis_client.client)
@@ -228,6 +241,20 @@ class BlockProcessor:
         wei = self.web3.from_wei(tx_value, "ether")
 
         value_usd = float(wei) * eth_price if eth_price else None
+
+        txn_type = int(tx.get("type", 0)) if tx.get("type") is not None else 0
+        max_fee = int(tx.get("maxFeePerGas", 0)) if tx.get("maxFeePerGas") else None
+        max_priority = (
+            int(tx.get("maxPriorityFeePerGas", 0))
+            if tx.get("maxPriorityFeePerGas")
+            else None
+        )
+        gas_price = int(tx.get("gasPrice", 0))
+
+        effective_gas_price = gas_price
+        if txn_type == 2 and base_fee_per_gas is not None and max_fee is not None:
+            priority_fee = max_priority if max_priority is not None else 0
+            effective_gas_price = min(max_fee, base_fee_per_gas + priority_fee)
 
         return Transaction(
             tx_hash=tx["hash"].hex(),
@@ -239,7 +266,11 @@ class BlockProcessor:
             value=tx_value,
             value_usd=value_usd,
             gas_used=tx.get("gas"),
-            gas_price=int(tx.get("gasPrice", 0)),
+            gas_price=gas_price,
+            effective_gas_price=effective_gas_price,
+            max_fee_per_gas=max_fee,
+            max_priority_fee_per_gas=max_priority,
+            txn_type=txn_type,
             input=tx.get("input"),
             status=1,
         )
