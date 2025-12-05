@@ -230,7 +230,9 @@ class BlockProcessor:
         finally:
             session.close()
 
-    def _parse_transaction(self, tx: TxData, block_number, block_hash, block_ts, base_fee_per_gas=None):
+    def _parse_transaction(
+        self, tx: TxData, block_number, block_hash, block_ts, base_fee_per_gas=None
+    ):
         """Parse a single transaction."""
 
         eth_price = self.token.get_eth_price(self.redis_client.client)
