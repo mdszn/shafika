@@ -8,11 +8,12 @@ Right now, Shafika indexes the essentials from Ethereum mainnet:
 
 - **Blocks & Transactions** - the basics with timestamps, gas, and USD values
 - **ERC-20 Transfers** - token movements with normalized amounts
+- **Token Balances** - real-time running balance snapshots for ERC-20/1155
 - **NFTs (ERC-721/1155)** - transfers plus automatic metadata fetching from IPFS
 - **DEX Swaps** - Uniswap V2/V3 and SushiSwap events
 - **Contract Deployments** - who deployed what and when
 - **Address Stats** - aggregated activity per address
-- **Gas Fees & Burnt ETH** = track network congestion and historical costs of transactions
+- **Gas Fees & Burnt ETH** - track network congestion and historical costs (EIP-1559)
 
 Everything tracks the canonical chain, so reorgs don't mess up your data.
 

@@ -20,7 +20,14 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from web3 import Web3
 
-from db.models.models import AddressStats, Approval, JobType, LogJob, Transfer
+from db.models.models import (
+    AddressStats,
+    Approval,
+    JobType,
+    LogJob,
+    TokenBalance,
+    Transfer,
+)
 
 # Event signatures
 TRANSFER_EVENT_SIGNATURE = (
@@ -371,6 +378,10 @@ class LogProcessor:
             from_address = kwargs.get("from_address")
             to_address = kwargs.get("to_address")
             block_number = kwargs.get("block_number")
+            token_address = kwargs.get("token_address")
+            token_id = kwargs.get("token_id")
+            amount = kwargs.get("amount", 0)
+            token_type = kwargs.get("token_type", "erc20")
             zero_addr = "0x0000000000000000000000000000000000000000"
 
             updates = []
@@ -385,6 +396,19 @@ class LogProcessor:
             for update in updates:
                 self._update_token_transfer_stats(
                     session, update["addr"], block_number, sent=update["sent"]
+                )
+
+            # Update Token Balances
+            t_id = token_id if token_id is not None else 0
+
+            if from_address and from_address != zero_addr:
+                self._update_balance(
+                    session, from_address, token_address, t_id, token_type, -amount
+                )
+
+            if to_address and to_address != zero_addr:
+                self._update_balance(
+                    session, to_address, token_address, t_id, token_type, amount
                 )
 
             session.commit()
@@ -449,6 +473,37 @@ class LogProcessor:
         stmt = stmt.on_conflict_do_update(
             index_elements=["address"],
             set_=update_dict,
+        )
+
+        session.execute(stmt)
+
+    def _update_balance(
+        self,
+        session: Session,
+        address: str,
+        token_address: str,
+        token_id: int,
+        token_type: str,
+        amount_delta: int,
+    ):
+        """Update token balance using upsert"""
+        address_lower = address.lower()
+        token_address_lower = token_address.lower()
+
+        stmt = insert(TokenBalance).values(
+            address=address_lower,
+            token_address=token_address_lower,
+            token_id=token_id,
+            token_type=token_type,
+            balance=amount_delta,
+        )
+
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["address", "token_address", "token_id"],
+            set_={
+                "balance": TokenBalance.balance + amount_delta,
+                "last_updated_at": func.now(),
+            },
         )
 
         session.execute(stmt)

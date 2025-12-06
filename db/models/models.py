@@ -245,3 +245,15 @@ class Admin(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     last_used_at = Column(TIMESTAMP(timezone=True), nullable=True)
+
+
+class TokenBalance(Base):
+    __tablename__ = "token_balances"
+    address = Column(String(42), primary_key=True)
+    token_address = Column(String(42), primary_key=True)
+    token_id = Column(Numeric(78, 0), primary_key=True, default=0)  # 0 for ERC20
+    token_type = Column(Text, default="erc20")
+    balance = Column(Numeric(78, 0), default=0)
+    last_updated_at = Column(
+        TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
